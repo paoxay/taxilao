@@ -40,8 +40,24 @@ const dispatchOfferTimeoutMs = Number(process.env.DISPATCH_OFFER_TIMEOUT_MS || 3
 const defaultDriverCommissionPercent = 10;
 const defaultDriverMinimumBalanceLak = 20000;
 const defaultDriverLowBalanceWarningLak = 50000;
-const allowedOrigins = new Set([webOrigin, adminOrigin]);
+const additionalCorsOrigins = String(process.env.ADDITIONAL_CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set([webOrigin, adminOrigin, ...additionalCorsOrigins]);
 const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+for (const origin of [webOrigin, adminOrigin]) {
+  try {
+    const parsed = new URL(origin);
+    if (!parsed.hostname.startsWith("www.")) {
+      parsed.hostname = `www.${parsed.hostname}`;
+      allowedOrigins.add(parsed.toString().replace(/\/$/, ""));
+    }
+  } catch (_error) {
+    // Ignore invalid configured origins; CORS will still reject unknown origins.
+  }
+}
 
 if (mongoUri.startsWith("mongodb+srv://")) {
   dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -52,6 +68,8 @@ const mongo = new MongoClient(mongoUri, {
   connectTimeoutMS: 12000
 });
 let db;
+
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 
 const initialDrivers = [
   {
