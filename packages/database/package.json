@@ -1,0 +1,23 @@
+{
+  "name": "@taxilao/database",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.16.1",
+    "@taxilao/shared": "*"
+  },
+  "devDependencies": {
+    "prisma": "^5.16.1",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

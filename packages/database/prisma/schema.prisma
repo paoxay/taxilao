@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  DRIVER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_QR
+  CARD
+  USDT_TRC20
+  USDT_BEP20
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  googleId       String?         @unique
+  avatarUrl      String?
+  role           Role            @default(USER)
+  refreshTokens  String[]        @default([])
+  isSuspended    Boolean         @default(false)
+  driverProfile  DriverProfile?
+  bookings       Booking[]
+  reviews        Review[]
+  adminLogs      AdminLog[]      @relation("AdminActor")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model City {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  imageUrl  String?
+  drivers   DriverProfile[]
+  tours     TourPackage[]
+  createdAt DateTime        @default(now())
+}
+
+model DriverProfile {
+  id                 String                @id @default(cuid())
+  userId             String                @unique
+  user               User                  @relation(fields: [userId], references: [id])
+  cityId             String
+  city               City                  @relation(fields: [cityId], references: [id])
+  bio                String?
+  languages          String[]              @default([])
+  rating             Float                 @default(0)
+  reviewCount        Int                   @default(0)
+  startingPriceLak   Int                   @default(50000)
+  verified           Boolean               @default(false)
+  premium            Boolean               @default(false)
+  active             Boolean               @default(true)
+  routes             String[]              @default([])
+  vehicles           Vehicle[]
+  bookings           Booking[]
+  reviews            Review[]
+  documents          DriverDocument[]
+  premiumSubscriptions PremiumSubscription[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+}
+
+model Vehicle {
+  id              String        @id @default(cuid())
+  driverProfileId String
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id])
+  type            String
+  make            String
+  model           String
+  plateNumber     String?
+  seats           Int
+  imageUrl        String?
+  createdAt       DateTime      @default(now())
+
+  @@unique([driverProfileId, type])
+}
+
+model Booking {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id])
+  driverProfileId   String?
+  driverProfile     DriverProfile? @relation(fields: [driverProfileId], references: [id])
+  pickup            String
+  dropoff           String
+  pickupAt          DateTime
+  passengers        Int
+  distanceKm        Float
+  estimatedPriceLak Int
+  status            BookingStatus @default(PENDING)
+  payment           Payment?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model TourPackage {
+  id          String   @id @default(cuid())
+  cityId      String
+  city        City     @relation(fields: [cityId], references: [id])
+  title       String
+  duration    String
+  priceLak    Int
+  description String
+  imageUrl    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Review {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  driverProfileId String
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id])
+  rating          Int
+  comment         String
+  hidden          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  bookingId         String        @unique
+  booking           Booking       @relation(fields: [bookingId], references: [id])
+  method            PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  amountLak         Int
+  currency          String        @default("LAK")
+  providerReference String?
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model DriverDocument {
+  id              String         @id @default(cuid())
+  driverProfileId String
+  driverProfile   DriverProfile  @relation(fields: [driverProfileId], references: [id])
+  type            String
+  fileUrl         String
+  status          DocumentStatus @default(PENDING)
+  reviewedAt      DateTime?
+  createdAt       DateTime       @default(now())
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation("AdminActor", fields: [actorId], references: [id])
+  action    String
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model PremiumSubscription {
+  id              String        @id @default(cuid())
+  driverProfileId String
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id])
+  startsAt        DateTime
+  endsAt          DateTime
+  monthlyFeeLak   Int
+  active          Boolean       @default(true)
+  paymentId       String?
+  createdAt       DateTime      @default(now())
+}

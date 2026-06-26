@@ -1,0 +1,28 @@
+{
+  "name": "taxilao",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TAXILAO.COM premium taxi marketplace and driver directory for Laos.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @taxilao/web",
+    "dev:web": "npm run dev --workspace @taxilao/web",
+    "dev:admin": "npm run dev --workspace @taxilao/admin",
+    "dev:api": "npm run dev --workspace @taxilao/api",
+    "start:web": "npm run start --workspace @taxilao/web",
+    "start:admin": "npm run start --workspace @taxilao/admin",
+    "start:api": "npm run start --workspace @taxilao/api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run prisma:generate --workspace @taxilao/database",
+    "db:push": "npm run prisma:push --workspace @taxilao/database",
+    "db:migrate": "npm run prisma:migrate --workspace @taxilao/database",
+    "db:seed": "npm run prisma:seed --workspace @taxilao/database"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
