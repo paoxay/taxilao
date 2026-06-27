@@ -273,6 +273,19 @@ class DriverApi {
     return ChatMessage.fromJson(body as Map<String, dynamic>);
   }
 
+  Future<void> submitCustomerReview(
+      String bookingId, int rating, String comment) async {
+    final response = await http.post(
+      Uri.parse('${session.apiBaseUrl}/driver/bookings/$bookingId/review'),
+      headers: headers,
+      body: jsonEncode({'rating': rating, 'comment': comment}),
+    );
+    final body = decodeBody(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(body['message']?.toString() ?? 'ໃຫ້ດາວບໍ່ສຳເລັດ');
+    }
+  }
+
   Future<void> updateAvailability({
     required bool online,
     required bool autoAccept,
@@ -826,9 +839,56 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     return true;
   }
 
+  void openFloatingChat(DriverBooking booking) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xff0d121b),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.chat_bubble_outline,
+                        color: Color(0xfff1c45d)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text('ແຊັດກັບ ${booking.customerName}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w900))),
+                    IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                DriverCustomerActions(api: api, booking: booking),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final driver = widget.session.driver!;
+    final activeChatJob = activeJob;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xff0d121b),
@@ -984,6 +1044,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               label: 'ໂປຣໄຟ'),
         ],
       ),
+      floatingActionButton: activeChatJob == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => openFloatingChat(activeChatJob),
+              backgroundColor: const Color(0xfff1c45d),
+              foregroundColor: const Color(0xff15110a),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('ແຊັດ'),
+            ),
     );
   }
 }
@@ -1480,6 +1549,8 @@ class JobCard extends StatelessWidget {
                           fontSize: 11)),
                 ],
                 const SizedBox(height: 10),
+                CustomerPreview(booking: booking),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -1589,16 +1660,19 @@ class JobCard extends StatelessWidget {
               ],
               if (!compact) ...[
                 const SizedBox(height: 12),
+                CustomerPreview(booking: booking),
+                const SizedBox(height: 12),
                 JobLine(
                     icon: Icons.location_on_outlined,
                     label: 'ຈຸດສົ່ງ',
                     value: booking.dropoff.isEmpty
                         ? 'ບໍ່ໄດ້ລະບຸ'
                         : booking.dropoff),
-                JobLine(
-                    icon: Icons.phone_outlined,
-                    label: 'ເບີໂທ',
-                    value: booking.customerPhone),
+                if (booking.canViewCustomerContact)
+                  JobLine(
+                      icon: Icons.phone_outlined,
+                      label: 'ເບີໂທ',
+                      value: booking.customerPhone),
                 JobLine(
                     icon: Icons.payments_outlined,
                     label: 'ລາຄາ',
@@ -1613,20 +1687,22 @@ class JobCard extends StatelessWidget {
                       label: 'ຫ່າງຈາກເຈົ້າ',
                       value:
                           '${pickupDistanceKm.toStringAsFixed(2)} km ຫາຈຸດຮັບ'),
-                if (booking.note.isNotEmpty)
+                if (booking.canViewCustomerContact && booking.note.isNotEmpty)
                   JobLine(
                       icon: Icons.notes, label: 'ໝາຍເຫດ', value: booking.note),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                        child: OutlinedButton.icon(
-                            onPressed: booking.customerPhone.isEmpty
-                                ? null
-                                : () => launchPhone(booking.customerPhone),
-                            icon: const Icon(Icons.call),
-                            label: const Text('ໂທ'))),
-                    const SizedBox(width: 8),
+                    if (booking.canViewCustomerContact) ...[
+                      Expanded(
+                          child: OutlinedButton.icon(
+                              onPressed: booking.customerPhone.isEmpty
+                                  ? null
+                                  : () => launchPhone(booking.customerPhone),
+                              icon: const Icon(Icons.call),
+                              label: const Text('ໂທ'))),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                         child: OutlinedButton.icon(
                             onPressed: booking.hasPickup
@@ -1921,6 +1997,84 @@ class DetailLine extends StatelessWidget {
   }
 }
 
+class CustomerPreview extends StatelessWidget {
+  const CustomerPreview({super.key, required this.booking});
+
+  final DriverBooking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final customerName = booking.customerName.trim();
+    final initial =
+        customerName.isEmpty ? 'T' : customerName.substring(0, 1).toUpperCase();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xff111b26),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xff263347)),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: booking.customerAvatarUrl.isEmpty
+                ? Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    color: const Color(0xff263347),
+                    child: Text(initial,
+                        style: const TextStyle(
+                            color: Color(0xfff1c45d),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18)),
+                  )
+                : Image.network(
+                    booking.customerAvatarUrl,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      color: const Color(0xff263347),
+                      child: Text(initial,
+                          style: const TextStyle(
+                              color: Color(0xfff1c45d),
+                              fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('ລູກຄ້າ',
+                    style: TextStyle(color: Color(0xff9ba7b7), fontSize: 11)),
+                Text(booking.customerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 15)),
+              ],
+            ),
+          ),
+          const Icon(Icons.star, color: Color(0xfff1c45d), size: 18),
+          const SizedBox(width: 4),
+          Text(booking.customerRating.toStringAsFixed(1),
+              style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(width: 8),
+          Text('${booking.customerTrips} trips',
+              style: const TextStyle(color: Color(0xff9ba7b7), fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
 class DriverProfile {
   DriverProfile({
     required this.id,
@@ -1975,6 +2129,12 @@ class DriverBooking {
     required this.driverId,
     required this.pickup,
     required this.dropoff,
+    required this.customerName,
+    required this.customerAvatarUrl,
+    required this.customerRating,
+    required this.customerTrips,
+    required this.customerContactVisible,
+    required this.customerReviewGiven,
     required this.customerPhone,
     required this.note,
     required this.status,
@@ -1997,6 +2157,12 @@ class DriverBooking {
   final String driverId;
   final String pickup;
   final String dropoff;
+  final String customerName;
+  final String customerAvatarUrl;
+  final double customerRating;
+  final int customerTrips;
+  final bool customerContactVisible;
+  final bool customerReviewGiven;
   final String customerPhone;
   final String note;
   final String status;
@@ -2020,6 +2186,26 @@ class DriverBooking {
       driverId: json['driverId']?.toString() ?? '',
       pickup: json['pickup']?.toString() ?? '',
       dropoff: json['dropoff']?.toString() ?? '',
+      customerName: ((json['customerDisplay'] is Map
+                  ? json['customerDisplay']['name']
+                  : null) ??
+              json['customerName'] ??
+              'TAXILAO customer')
+          .toString(),
+      customerAvatarUrl: (json['customerDisplay'] is Map
+                  ? json['customerDisplay']['avatarUrl']
+                  : null)
+              ?.toString() ??
+          '',
+      customerRating: numberToDouble(json['customerDisplay'] is Map
+          ? json['customerDisplay']['rating']
+          : 5),
+      customerTrips: numberToInt(json['customerDisplay'] is Map
+          ? json['customerDisplay']['trips']
+          : 0),
+      customerContactVisible: json['customerContactVisible'] == true,
+      customerReviewGiven: json['customerReview'] is Map &&
+          json['customerReview']['rating'] != null,
       customerPhone: json['customerPhone']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
       status: json['status']?.toString() ?? 'PENDING',
@@ -2040,6 +2226,9 @@ class DriverBooking {
 
   bool get isActiveForDriver =>
       ['CONFIRMED', 'ON_THE_WAY', 'IN_PROGRESS'].contains(status);
+
+  bool get canViewCustomerContact =>
+      customerContactVisible || isActiveForDriver || status == 'COMPLETED';
 
   bool get hasPickup => pickupLocation != null;
 
@@ -2803,7 +2992,8 @@ class DriverRoutePointLabel extends StatelessWidget {
 }
 
 class DriverCustomerActions extends StatefulWidget {
-  const DriverCustomerActions({super.key, required this.api, required this.booking});
+  const DriverCustomerActions(
+      {super.key, required this.api, required this.booking});
 
   final DriverBooking booking;
   final DriverApi api;
@@ -2820,14 +3010,16 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
   bool sending = false;
   String error = '';
 
-  bool get chatEnabled => ['CONFIRMED', 'ON_THE_WAY', 'IN_PROGRESS'].contains(widget.booking.status);
+  bool get chatEnabled => ['CONFIRMED', 'ON_THE_WAY', 'IN_PROGRESS']
+      .contains(widget.booking.status);
 
   @override
   void initState() {
     super.initState();
     if (chatEnabled) {
       loadMessages();
-      timer = Timer.periodic(const Duration(seconds: 5), (_) => loadMessages(silent: true));
+      timer = Timer.periodic(
+          const Duration(seconds: 5), (_) => loadMessages(silent: true));
     }
   }
 
@@ -2900,13 +3092,15 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
               const SizedBox(width: 8),
               IconButton.filledTonal(
                 tooltip: 'ຖ່າຍຮູບ',
-                onPressed: () => showSnack(context, 'ຮູບ/ສຽງຈະຕໍ່ upload UI ໃນຂັ້ນຕໍ່ໄປ'),
+                onPressed: () =>
+                    showSnack(context, 'ຮູບ/ສຽງຈະຕໍ່ upload UI ໃນຂັ້ນຕໍ່ໄປ'),
                 icon: const Icon(Icons.photo_camera_outlined),
               ),
               const SizedBox(width: 6),
               IconButton.filledTonal(
                 tooltip: 'ອັດສຽງ',
-                onPressed: () => showSnack(context, 'ຮູບ/ສຽງຈະຕໍ່ upload UI ໃນຂັ້ນຕໍ່ໄປ'),
+                onPressed: () =>
+                    showSnack(context, 'ຮູບ/ສຽງຈະຕໍ່ upload UI ໃນຂັ້ນຕໍ່ໄປ'),
                 icon: const Icon(Icons.mic_none),
               ),
             ],
@@ -2914,16 +3108,23 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.chat_bubble_outline, color: Color(0xfff1c45d), size: 18),
+              const Icon(Icons.chat_bubble_outline,
+                  color: Color(0xfff1c45d), size: 18),
               const SizedBox(width: 7),
-              const Text('ແຊັດກັບລູກຄ້າ', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('ແຊັດກັບລູກຄ້າ',
+                  style: TextStyle(fontWeight: FontWeight.w900)),
               const Spacer(),
-              if (loading) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              if (loading)
+                const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
             ],
           ),
           const SizedBox(height: 8),
           if (!chatEnabled)
-            const Text('ແຊັດຈະເປີດຫຼັງຈາກຮັບອໍເດີ້ແລ້ວ', style: TextStyle(color: Color(0xffaeb8c7)))
+            const Text('ແຊັດຈະເປີດຫຼັງຈາກຮັບອໍເດີ້ແລ້ວ',
+                style: TextStyle(color: Color(0xffaeb8c7)))
           else ...[
             Container(
               constraints: const BoxConstraints(maxHeight: 170),
@@ -2934,7 +3135,9 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
                 border: Border.all(color: const Color(0xff263244)),
               ),
               child: messages.isEmpty
-                  ? const Center(child: Text('ຍັງບໍ່ມີຂໍ້ຄວາມ', style: TextStyle(color: Color(0xff9ba7b7))))
+                  ? const Center(
+                      child: Text('ຍັງບໍ່ມີຂໍ້ຄວາມ',
+                          style: TextStyle(color: Color(0xff9ba7b7))))
                   : ListView.builder(
                       shrinkWrap: true,
                       itemCount: messages.length,
@@ -2942,20 +3145,31 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
                         final message = messages[index];
                         final mine = message.senderRole == 'DRIVER';
                         return Align(
-                          alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                          alignment: mine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 7),
                             constraints: const BoxConstraints(maxWidth: 260),
                             decoration: BoxDecoration(
-                              color: mine ? const Color(0xff2a2416) : const Color(0xff172131),
+                              color: mine
+                                  ? const Color(0xff2a2416)
+                                  : const Color(0xff172131),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(message.senderName, style: const TextStyle(color: Color(0xfff1c45d), fontSize: 10, fontWeight: FontWeight.w900)),
-                                Text(message.text, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                Text(message.senderName,
+                                    style: const TextStyle(
+                                        color: Color(0xfff1c45d),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900)),
+                                Text(message.text,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
                               ],
                             ),
                           ),
@@ -2971,20 +3185,159 @@ class _DriverCustomerActionsState extends State<DriverCustomerActions> {
                     controller: messageController,
                     minLines: 1,
                     maxLines: 3,
-                    decoration: const InputDecoration(hintText: 'ພິມຂໍ້ຄວາມ...'),
+                    decoration:
+                        const InputDecoration(hintText: 'ພິມຂໍ້ຄວາມ...'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
                   onPressed: sending ? null : sendMessage,
-                  icon: sending ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send),
+                  icon: sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send),
                 ),
               ],
             ),
             if (error.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text(error, style: const TextStyle(color: Color(0xffff9b9b), fontSize: 12)),
+              Text(error,
+                  style:
+                      const TextStyle(color: Color(0xffff9b9b), fontSize: 12)),
             ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class DriverCustomerReviewPanel extends StatefulWidget {
+  const DriverCustomerReviewPanel(
+      {super.key, required this.api, required this.booking});
+
+  final DriverApi api;
+  final DriverBooking booking;
+
+  @override
+  State<DriverCustomerReviewPanel> createState() =>
+      _DriverCustomerReviewPanelState();
+}
+
+class _DriverCustomerReviewPanelState extends State<DriverCustomerReviewPanel> {
+  final commentController = TextEditingController();
+  int rating = 5;
+  bool sent = false;
+  bool sending = false;
+  String message = '';
+
+  @override
+  void initState() {
+    super.initState();
+    sent = widget.booking.customerReviewGiven;
+  }
+
+  @override
+  void dispose() {
+    commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> submit() async {
+    final comment = commentController.text.trim();
+    if (sent || sending) return;
+    if (comment.isEmpty) {
+      setState(() => message = 'ກະລຸນາໃສ່ຄຳເຫັນສັ້ນໆ');
+      return;
+    }
+    setState(() {
+      sending = true;
+      message = '';
+    });
+    try {
+      await widget.api.submitCustomerReview(widget.booking.id, rating, comment);
+      if (!mounted) return;
+      setState(() {
+        sent = true;
+        sending = false;
+        message = 'ໃຫ້ດາວລູກຄ້າສຳເລັດ';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        sending = false;
+        message = error.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.star_rate_rounded, color: Color(0xfff1c45d)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text('ໃຫ້ດາວລູກຄ້າ ${widget.booking.customerName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900))),
+              if (sent)
+                const Badge(
+                  label: Text('ໃຫ້ແລ້ວ'),
+                  backgroundColor: Color(0xff1f7a4b),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: List.generate(5, (index) {
+              final value = index + 1;
+              return IconButton(
+                onPressed: sent ? null : () => setState(() => rating = value),
+                icon: Icon(
+                  value <= rating ? Icons.star : Icons.star_border,
+                  color: const Color(0xfff1c45d),
+                ),
+              );
+            }),
+          ),
+          TextField(
+            controller: commentController,
+            enabled: !sent,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+                hintText: 'ຂຽນຄຳເຫັນເຊັ່ນ: ລູກຄ້າສຸພາບ ລໍຖ້າຕາມຈຸດ...'),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: sent || sending ? null : submit,
+              icon: sending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check_circle_outline),
+              label: Text(sent
+                  ? 'ໃຫ້ດາວແລ້ວ'
+                  : sending
+                      ? 'ກຳລັງບັນທຶກ...'
+                      : 'ບັນທຶກຄະແນນ'),
+            ),
+          ),
+          if (message.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(message,
+                style: const TextStyle(color: Color(0xfff1c45d), fontSize: 12)),
           ],
         ],
       ),
@@ -3027,17 +3380,20 @@ void showBookingDetails(BuildContext context, DriverBooking booking,
                 AppPanel(
                   child: Column(
                     children: [
+                      CustomerPreview(booking: booking),
+                      const SizedBox(height: 12),
                       DetailLine(label: 'ສະຖານະ', value: booking.statusLabel),
                       DetailLine(label: 'ຈຸດຮັບ', value: booking.pickup),
                       DetailLine(
                           label: 'ຈຸດສົ່ງ',
                           value:
                               booking.dropoff.isEmpty ? '-' : booking.dropoff),
-                      DetailLine(
-                          label: 'ເບີໂທ',
-                          value: booking.customerPhone.isEmpty
-                              ? '-'
-                              : booking.customerPhone),
+                      if (booking.canViewCustomerContact)
+                        DetailLine(
+                            label: 'ເບີໂທ',
+                            value: booking.customerPhone.isEmpty
+                                ? '-'
+                                : booking.customerPhone),
                       DetailLine(label: 'ລາຄາ', value: booking.priceLabel),
                       DetailLine(
                           label: 'ໄລຍະທາງ',
@@ -3063,14 +3419,21 @@ void showBookingDetails(BuildContext context, DriverBooking booking,
                           value: booking.pickupAt == null
                               ? '-'
                               : formatDateTime(booking.pickupAt!)),
-                      DetailLine(
-                          label: 'ໝາຍເຫດ',
-                          value: booking.note.isEmpty ? '-' : booking.note),
+                      if (booking.canViewCustomerContact)
+                        DetailLine(
+                            label: 'ໝາຍເຫດ',
+                            value: booking.note.isEmpty ? '-' : booking.note),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                DriverCustomerActions(api: api, booking: booking),
+                if (booking.canViewCustomerContact) ...[
+                  const SizedBox(height: 10),
+                  DriverCustomerActions(api: api, booking: booking),
+                ],
+                if (booking.status == 'COMPLETED') ...[
+                  const SizedBox(height: 10),
+                  DriverCustomerReviewPanel(api: api, booking: booking),
+                ],
               ],
             ),
           ),
