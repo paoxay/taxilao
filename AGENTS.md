@@ -167,6 +167,8 @@ Important collections:
 The API seeds empty collections and performs small non-destructive field migrations
 in `seedIfEmpty()`.
 
+Seeded demo data can include `Guest Traveler` / `guest@taxilao.local` / id `guest`. This is sample/demo data, not a real Google customer account. Do not treat it as a live user; it may be hidden or removed from Admin displays later if requested.
+
 Do not drop collections or databases without explicit user approval.
 Do not overwrite existing user data during migrations. Prefer `$exists: false`
 updates and safe defaults.
@@ -411,6 +413,7 @@ Driver APK behavior:
   driver wallet with a required audit note. `settings/pricing` stores
   `driverCommissionPercent`, `driverMinimumBalanceLak`, and
   `driverLowBalanceWarningLak`.
+- Finance center wallet adjustments accept comma-formatted amounts such as `50,000`, auto-load the selected driver ledger, and support admin credit/debit even for inactive drivers while still preventing negative balances.
 - Drivers cannot accept an order if wallet balance is below the greater of the minimum
   balance setting or that order's estimated commission. On `COMPLETED`, the API debits
   the commission once and prevents negative wallet balances with an atomic MongoDB
