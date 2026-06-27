@@ -76,8 +76,7 @@ type MemberTokens = {
   refreshToken: string;
 };
 
-const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
-const liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
+const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];`r`nconst lastBookingKey = "taxilao_last_booking_id";`r`nconst liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
 const dismissedBookingKey = "taxilao_dismissed_booking_id";
 const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
 
@@ -102,11 +101,7 @@ function dismissBookingId(id: string) {
   localStorage.setItem(dismissedBookingKey, id);
 }
 
-function undismissBookingId(id: string) {
-  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);
-  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
-  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);
-}
+function undismissBookingId(id: string) {`r`n  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);`r`n  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));`r`n  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);`r`n}`r`n`r`nfunction clearStoredBookingId(id?: string) {`r`n  if (!id || localStorage.getItem(lastBookingKey) === id) {`r`n    localStorage.removeItem(lastBookingKey);`r`n  }`r`n}
 
 export default function UserDashboardPage() {
   const apiUrl = getApiUrl();
@@ -146,7 +141,7 @@ export default function UserDashboardPage() {
     setMemberToken(accessToken);
     setBooking((current) => {
       if (current) return nextBookings.find((item) => item.id === current.id) ?? current;
-      const savedId = localStorage.getItem("taxilao_last_booking_id");
+      const savedId = localStorage.getItem(lastBookingKey);
       const dismissedIds = getDismissedBookingIds();
       return nextBookings.find((item) => item.id === savedId && !dismissedIds.has(item.id) && liveTrackerStatuses.includes(item.status))
         ?? nextBookings.find((item) => activeStatuses.includes(item.status) && !dismissedIds.has(item.id))
@@ -200,7 +195,7 @@ export default function UserDashboardPage() {
       setStatus("success");
       setMessage(copy.searchBooking);
       undismissBookingId(bookingId);
-      localStorage.setItem("taxilao_last_booking_id", bookingId);
+      localStorage.setItem(lastBookingKey, bookingId);
       localStorage.setItem("taxilao_last_booking_phone", phone);
     } catch (error) {
       setBooking(null);
@@ -210,14 +205,12 @@ export default function UserDashboardPage() {
   }
 
   useEffect(() => {
-    setBookingId(localStorage.getItem("taxilao_last_booking_id") ?? "");
+    setBookingId(localStorage.getItem(lastBookingKey) ?? "");
     setPhone(localStorage.getItem("taxilao_last_booking_phone") ?? "");
     void restoreMemberSession();
   }, []);
 
-  useEffect(() => {
-    if (!booking) return;
-    localStorage.setItem("taxilao_last_booking_id", booking.id);
+  useEffect(() => {`r`n    if (!booking) return;`r`n    if (activeStatuses.includes(booking.status)) {`r`n      localStorage.setItem(lastBookingKey, booking.id);`r`n    } else {`r`n      dismissBookingId(booking.id);`r`n      clearStoredBookingId(booking.id);`r`n    }
     if (booking.customerPhone || booking.customerWhatsapp) {
       localStorage.setItem("taxilao_last_booking_phone", booking.customerPhone || booking.customerWhatsapp || "");
     }
@@ -343,13 +336,10 @@ export default function UserDashboardPage() {
             const nextBooking = (closedBooking as PublicBooking | undefined) || booking;
             if (activeStatuses.includes(nextBooking.status)) {
               setBooking(nextBooking);
-              localStorage.setItem("taxilao_last_booking_id", nextBooking.id);
+              localStorage.setItem(lastBookingKey, nextBooking.id);
               return;
             }
-            undismissBookingId(nextBooking.id);
-            if (nextBooking.id === localStorage.getItem("taxilao_last_booking_id")) {
-              localStorage.removeItem("taxilao_last_booking_id");
-            }
+            dismissBookingId(nextBooking.id);`r`n            clearStoredBookingId(nextBooking.id);
             setBooking(null);
           }}
         />
