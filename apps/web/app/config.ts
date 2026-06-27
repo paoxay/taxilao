@@ -1,6 +1,9 @@
 export function getApiUrl() {
-  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  const fallbackUrl = process.env.NODE_ENV === "production" ? "https://api.taxilao.com" : "http://localhost:4000";
+  if (process.env.NODE_ENV === "production") {
+    return "https://api.taxilao.com";
+  }
 
-  return (configuredUrl || fallbackUrl).replace(/\/$/, "");
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  return (configuredUrl || "http://localhost:4000").replace(/\/$/, "");
 }
