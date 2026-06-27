@@ -1,6 +1,7 @@
 import { drivers as fallbackDrivers, tourPackages as fallbackTours } from "@taxilao/shared";
+import { getApiUrl } from "./config";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const apiUrl = getApiUrl();
 
 export async function getDrivers(query = "") {
   try {

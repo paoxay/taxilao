@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { BadgeCheck, Ban, Banknote, CalendarDays, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, Trash2, UsersRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
+import { getApiUrl } from "./config";
 
 const AdminPlaceManager = dynamic(
   () => import("./admin-place-manager").then((module) => module.AdminPlaceManager),
@@ -119,7 +120,7 @@ const adminSections: Array<{ id: AdminSection; label: string }> = [
 ];
 
 export function AdminDashboard() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [drivers, setDrivers] = useState<Driver[]>([]);

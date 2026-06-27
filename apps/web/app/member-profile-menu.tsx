@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { BookOpen, ChevronDown, CircleUserRound, Gauge, LogIn, LogOut, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { getApiUrl } from "./config";
 import { useUiCopy } from "./use-ui-copy";
 
 type Member = {
@@ -13,7 +14,7 @@ type Member = {
 };
 
 export function MemberProfileMenu({ mobile = false }: { mobile?: boolean }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { locale, copy } = useUiCopy();
   const [member, setMember] = useState<Member | null>(null);
   const [loaded, setLoaded] = useState(false);

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { getApiUrl } from "../../config";
 import { useUiCopy } from "../../use-ui-copy";
 
 export function DriverApplyForm() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { copy } = useUiCopy();
   const [name, setName] = useState("");
   const [city, setCity] = useState("Vientiane");

@@ -1,6 +1,7 @@
 import { Chrome, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Nav } from "../components";
 import { getLocale } from "@taxilao/shared";
+import { getApiUrl } from "../config";
 import { getUiCopy } from "../ui-copy";
 
 const errorMessages: Record<string, string> = {
@@ -15,7 +16,7 @@ function safeReturnTo(value?: string) {
 }
 
 export default function LoginPage({ searchParams }: { searchParams?: { error?: string; lang?: string; returnTo?: string } }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const locale = getLocale(searchParams?.lang);
   const copy = getUiCopy(locale);
   const error = searchParams?.error ? errorMessages[searchParams.error] : "";

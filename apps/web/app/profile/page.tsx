@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, BookOpen, CalendarDays, CheckCircle2, Copy, Gauge, IdCard, LogOut, Mail, MapPin, Route, ShieldCheck, UserRound } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { Nav } from "../components";
+import { getApiUrl } from "../config";
 import { useUiCopy } from "../use-ui-copy";
 
 type Member = {
@@ -29,7 +30,7 @@ type Booking = {
 };
 
 export default function ProfilePage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { locale, copy } = useUiCopy();
   const statusLabels: Record<string, string> = {
     PENDING: copy.pending, OFFERED: copy.waitingForDriver, CONFIRMED: copy.confirmed, ON_THE_WAY: copy.onTheWay, IN_PROGRESS: copy.tripStarted,

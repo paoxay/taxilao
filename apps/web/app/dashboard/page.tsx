@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Banknote, CalendarCheck, Car, LogIn, LogOut, MapPin, Phone, RefreshCcw, Search, UserRound } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { Nav } from "../components";
+import { getApiUrl } from "../config";
 import { useUiCopy } from "../use-ui-copy";
 
 const RideLiveMap = dynamic(() => import("../ride-live-map").then((module) => module.RideLiveMap), { ssr: false });
@@ -65,7 +66,7 @@ type MemberTokens = {
 };
 
 export default function UserDashboardPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { locale, copy } = useUiCopy();
   const statusLabels: Record<string, string> = {
     PENDING: copy.pending, OFFERED: copy.waitingForDriver, CONFIRMED: copy.confirmed, ON_THE_WAY: copy.onTheWay, IN_PROGRESS: copy.tripStarted,

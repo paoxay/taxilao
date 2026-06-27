@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LoaderCircle, LockKeyhole, LogIn, ShieldCheck } from "lucide-react";
+import { getApiUrl } from "./config";
 import { useUiCopy } from "./use-ui-copy";
 
 type AuthState = "loading" | "authenticated" | "guest";
 
 export function MemberAuthGate({ children }: { children: React.ReactNode }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { locale, copy } = useUiCopy();
   const [state, setState] = useState<AuthState>("loading");
   const [returnTo, setReturnTo] = useState("/");

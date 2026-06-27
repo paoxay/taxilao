@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { Banknote, Car, Clock3, Gauge, LoaderCircle, LocateFixed, MapPin, MapPinned, Navigation, Route, UserRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
+import { getApiUrl } from "./config";
 import { formatUi } from "./ui-copy";
 import { useUiCopy } from "./use-ui-copy";
 import { MemberAuthGate } from "./member-auth-gate";
@@ -222,7 +223,7 @@ function BookingEstimatorForm({
   initialTourId?: string;
   bookingMode?: "taxi" | "driver";
 }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const { copy } = useUiCopy();
   const [drivers, setDrivers] = useState<BookingDriver[]>([]);
   const [tours, setTours] = useState<BookingTour[]>([]);

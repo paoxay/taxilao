@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarClock, Car, CheckCircle2, CircleDot, LocateFixed, LogOut, MapPin, Navigation, RefreshCcw, ShieldCheck, UserRound } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { Nav } from "../components";
+import { getApiUrl } from "../config";
 
 type DriverProfile = {
   id: string;
@@ -50,7 +51,7 @@ const nextActions: Record<string, { status: string; label: string }> = {
 };
 
 export default function DriverDashboardPage() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const apiUrl = getApiUrl();
   const [driverId, setDriverId] = useState("");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
