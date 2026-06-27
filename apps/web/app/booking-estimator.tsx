@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { Banknote, Car, Clock3, Gauge, LoaderCircle, LocateFixed, MapPin, MapPinned, Navigation, Route, UserRound, X } from "lucide-react";
+import { Banknote, Bike, Car, Clock3, Gauge, LoaderCircle, LocateFixed, MapPin, MapPinned, Navigation, Package, Route, UserRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { getApiUrl } from "./config";
 import { formatUi } from "./ui-copy";
@@ -32,6 +32,18 @@ type RouteEstimate = {
   };
 };
 
+type VehicleCategory = {
+  id: string;
+  code: string;
+  name: string;
+  nameLo?: string;
+  description?: string;
+  capacity: number;
+  ratePerKmLak: number;
+  minimumFareLak: number;
+  default?: boolean;
+};
+
 type BookingDriver = {
   id: string;
   name: string;
@@ -51,6 +63,37 @@ type BookingTour = {
   description: string;
   driverId?: string;
 };
+
+const activeBookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
+const dismissedBookingKey = "taxilao_dismissed_booking_id";
+const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
+
+function getDismissedBookingIds() {
+  const ids = new Set<string>();
+  const legacyId = localStorage.getItem(dismissedBookingKey);
+  if (legacyId) ids.add(legacyId);
+  try {
+    const stored = JSON.parse(localStorage.getItem(dismissedBookingsKey) || "[]");
+    if (Array.isArray(stored)) {
+      stored.filter((id) => typeof id === "string" && id).forEach((id) => ids.add(id));
+    }
+  } catch {
+    // Ignore old malformed local data.
+  }
+  return ids;
+}
+
+function dismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds().add(id)).slice(-30);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  localStorage.setItem(dismissedBookingKey, id);
+}
+
+function undismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);
+}
 
 type LocationFieldProps = {
   apiUrl: string;
@@ -227,6 +270,8 @@ function BookingEstimatorForm({
   const { copy } = useUiCopy();
   const [drivers, setDrivers] = useState<BookingDriver[]>([]);
   const [tours, setTours] = useState<BookingTour[]>([]);
+  const [vehicleCategories, setVehicleCategories] = useState<VehicleCategory[]>([]);
+  const [vehicleCategoryId, setVehicleCategoryId] = useState("");
   const [driverId, setDriverId] = useState(initialDriverId);
   const [tourId, setTourId] = useState(initialTourId);
   const [customerName, setCustomerName] = useState("");
@@ -252,14 +297,49 @@ function BookingEstimatorForm({
   const [liveToken, setLiveToken] = useState("");
   const selectedTour = useMemo(() => tours.find((tour) => tour.id === tourId), [tourId, tours]);
   const selectedDriver = useMemo(() => drivers.find((driver) => driver.id === driverId), [driverId, drivers]);
+  const selectedVehicleCategory = useMemo(() => vehicleCategories.find((category) => category.id === vehicleCategoryId) || vehicleCategories[0], [vehicleCategories, vehicleCategoryId]);
   const isDriverBooking = bookingMode === "driver";
-  const ratePerKmLak = selectedDriver?.ratePerKmLak ?? 15000;
-  const minimumFareLak = selectedDriver?.minimumFareLak ?? 50000;
+  const ratePerKmLak = selectedDriver?.ratePerKmLak ?? selectedVehicleCategory?.ratePerKmLak ?? 15000;
+  const minimumFareLak = selectedDriver?.minimumFareLak ?? selectedVehicleCategory?.minimumFareLak ?? 50000;
 
   useEffect(() => {
     fetch(`${apiUrl}/drivers`).then((response) => response.json()).then((data) => setDrivers(Array.isArray(data) ? data : [])).catch(() => setDrivers([]));
     fetch(`${apiUrl}/tours`).then((response) => response.json()).then((data) => setTours(Array.isArray(data) ? data : [])).catch(() => setTours([]));
+    fetch(`${apiUrl}/vehicle-categories`).then((response) => response.json()).then((data) => {
+      const categories = Array.isArray(data) ? data : [];
+      setVehicleCategories(categories);
+      setVehicleCategoryId((current) => current || categories.find((category) => category.default)?.id || categories[0]?.id || "");
+    }).catch(() => setVehicleCategories([]));
   }, [apiUrl]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("taxilao_member_access_token") || "";
+    const savedBookingId = localStorage.getItem("taxilao_last_booking_id") || "";
+    const dismissedBookingIds = getDismissedBookingIds();
+    if (!token || liveBooking) return;
+
+    let cancelled = false;
+    async function restoreLiveBooking() {
+      try {
+        const response = await fetch(`${apiUrl}/bookings/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store"
+        });
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data) || cancelled) return;
+        const restored = data.find((item: LiveBooking) => item.id === savedBookingId && !dismissedBookingIds.has(item.id) && activeBookingStatuses.includes(item.status))
+          ?? data.find((item: LiveBooking) => !dismissedBookingIds.has(item.id) && activeBookingStatuses.includes(item.status));
+        if (!restored) return;
+        setLiveBooking(restored);
+        setLiveToken(token);
+      } catch {
+        // Keep the booking form usable if restore fails.
+      }
+    }
+
+    void restoreLiveBooking();
+    return () => { cancelled = true; };
+  }, [apiUrl, liveBooking]);
 
   useEffect(() => {
     if (!selectedTour) return;
@@ -308,7 +388,7 @@ function BookingEstimatorForm({
     fetch(`${apiUrl}/maps/route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pickupCoordinates, dropoffCoordinates, driverId: driverId || undefined }),
+      body: JSON.stringify({ pickupCoordinates, dropoffCoordinates, driverId: driverId || undefined, vehicleCategoryId: !driverId ? selectedVehicleCategory?.id : undefined }),
       signal: controller.signal
     })
       .then(async (response) => {
@@ -393,6 +473,7 @@ function BookingEstimatorForm({
           customerPhone,
           customerWhatsapp,
           customerEmail: customerEmail || (customerPhone.includes("@") ? customerPhone : ""),
+          vehicleCategoryId: !driverId && !selectedTour ? selectedVehicleCategory?.id : undefined,
           note,
           pickup,
           dropoff,
@@ -412,6 +493,7 @@ function BookingEstimatorForm({
       setMessage(`${copy.bookingSuccess}: ${data.id}`);
       setLiveBooking(data);
       setLiveToken(memberToken || "");
+      undismissBookingId(data.id);
       localStorage.setItem("taxilao_last_booking_id", data.id);
       localStorage.setItem("taxilao_last_booking_phone", customerPhone);
     } catch (error) {
@@ -446,6 +528,36 @@ function BookingEstimatorForm({
         </div>
       ) : null}
 
+      {!selectedTour && !isDriverBooking && vehicleCategories.length ? (
+        <div className="vehicle-selector" aria-label={copy.chooseVehicle}>
+          <div className="vehicle-selector-head">
+            <span>{copy.chooseVehicle}</span>
+            <small>{copy.vehicleFare}</small>
+          </div>
+          <div className="vehicle-options" role="listbox" aria-label={copy.chooseVehicle}>
+            {vehicleCategories.map((category) => {
+              const Icon = category.code === "motorbike" ? Bike : category.code === "delivery" ? Package : Car;
+              const selected = selectedVehicleCategory?.id === category.id;
+              return (
+                <button
+                  key={category.id}
+                  className={selected ? "vehicle-option active" : "vehicle-option"}
+                  type="button"
+                  onClick={() => setVehicleCategoryId(category.id)}
+                  role="option"
+                  aria-selected={selected}
+                >
+                  <Icon size={18} />
+                  <span>
+                    <strong>{category.nameLo || category.name}</strong>
+                    <small>{category.capacity} {copy.seats} · {formatLak(category.minimumFareLak)}+</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       <div className="ride-route-card">
         <LocationField
           apiUrl={apiUrl}
@@ -575,7 +687,19 @@ function BookingEstimatorForm({
           apiUrl={apiUrl}
           token={liveToken}
           initialBooking={liveBooking}
-          onClose={() => setLiveBooking(null)}
+          onClose={(closedBooking) => {
+            const nextBooking = closedBooking || liveBooking;
+            if (activeBookingStatuses.includes(nextBooking.status)) {
+              setLiveBooking(nextBooking);
+              localStorage.setItem("taxilao_last_booking_id", nextBooking.id);
+              return;
+            }
+            undismissBookingId(nextBooking.id);
+            if (nextBooking.id === localStorage.getItem("taxilao_last_booking_id")) {
+              localStorage.removeItem("taxilao_last_booking_id");
+            }
+            setLiveBooking(null);
+          }}
         />
       ) : null}
       <MapLocationPicker

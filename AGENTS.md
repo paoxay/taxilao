@@ -22,6 +22,9 @@ Admin workflows:
 - Manage tours, uploaded images, price, assigned driver, active status, home banner
   visibility, and banner order.
 - Manage bookings, payments, and global pricing.
+- Manage member accounts, customer ratings, trip totals, and account status.
+- Admin Finance center manages driver wallets, ledger history, manual credits/debits, commission settings, and low-balance monitoring.
+- Manage vehicle categories, visibility, capacity, per-km rate, minimum fare, and default vehicle choice.
 
 ## Repository Architecture
 
@@ -158,6 +161,7 @@ Important collections:
 - `driverLedger`
 - `chatMessages`
 - `settings`
+- `vehicleCategories`
 - `adminLogs`
 
 The API seeds empty collections and performs small non-destructive field migrations
@@ -285,6 +289,7 @@ Rules:
 - Database content such as tour titles and driver bios remains in the language entered
   by Admin unless a translated content schema is intentionally added later.
 - Admin remains Lao-first and is not mixed into the public language selector.
+- Admin dashboard UI is organized as separate compact sections: dashboard, members, drivers, vehicle categories, places, tours, bookings, and payments.
 
 ## Major Customer Routes
 
@@ -317,6 +322,7 @@ Public/member:
 - `GET /drivers/:id`
 - `POST /drivers/apply`
 - `GET /tours`
+- `GET /vehicle-categories`
 - `POST /bookings`
 - `POST /bookings/lookup`
 - `GET /bookings/me`
@@ -332,10 +338,14 @@ Admin:
 
 - `POST /admin/login`
 - `GET /admin/dashboard`
+- `GET /admin/users`
+- `PATCH /admin/users/:id/status`
 - `GET|POST /admin/drivers`
 - `PATCH|DELETE /admin/drivers/:id`
 - `GET|POST /admin/drivers/:id/wallet`
 - `GET|PATCH /admin/pricing`
+- `GET|POST /admin/vehicle-categories`
+- `PATCH|DELETE /admin/vehicle-categories/:id`
 - `GET /admin/bookings`
 - `PATCH /admin/bookings/:id`
 - `GET /admin/payments`
@@ -413,6 +423,7 @@ Driver APK behavior:
 - Preserve user data and unrelated edits.
 - Prefer existing project patterns and shared helpers.
 - Use structured MongoDB operations, not string-built queries.
+- MongoDB update operators must not target the same field in one update document. For example, do not put `updatedAt` in both `$setOnInsert` and `$set`; this caused API startup failure during `vehicleCategories` seeding.
 - Do not change ports unless explicitly requested.
 - Do not silently start background processes.
 - Do not commit generated `.next`, logs, uploads, `.env`, or secrets.
@@ -433,6 +444,8 @@ Driver APK behavior:
   and Google OAuth require a publicly reachable API and updated origins/callback URLs.
 - Ride locations are stored as MongoDB GeoJSON points. Route distance, ETA, and fare
   are recalculated by the API before a booking is stored.
+- Vehicle categories are stored in MongoDB collection `vehicleCategories`. Admin can create, edit, disable, hide/show on Web, set default, capacity, `ratePerKmLak`, and `minimumFareLak`. Public Web only reads active and visible categories from `GET /vehicle-categories`.
+- Regular taxi requests (`RIDE`) without a selected driver store `vehicleCategoryId`, `vehicleCategoryName`, and `vehicleCategorySnapshot`. Route estimates and booking prices must be calculated server-side from the active vehicle category; never trust a client-sent price. If no category is sent, the API falls back to the default active category (currently SUV) for backward compatibility.
 - Fare mode is determined by booking type, not freely chosen: a regular taxi request
   without a selected driver is `FIXED`; booking a specific driver is `METER`; tour
   packages remain fixed-price. Meter bookings require explicit customer consent and
@@ -446,13 +459,29 @@ Driver APK behavior:
   `returnTo` path so users return to the exact taxi/driver/tour booking URL.
 - After a taxi request is created, the live tracker is the primary customer surface.
   It hides the close action until the booking is completed or cancelled, warns on
-  browser unload while active, and allows customer cancellation only while the booking
-  is `PENDING` or `OFFERED`.
+  browser unload while active, blocks browser back while active, and allows customer
+  cancellation only while the booking is `PENDING` or `OFFERED`. Active ride tracking
+  must not be dismissible with an X/back action; it remains visible until customer
+  cancellation, driver cancellation, completion, or another terminal status.
 - Customer cancellation is blocked after a driver accepts the booking. Accepted trips
   use in-trip chat between the authenticated customer and the assigned driver.
 - Booking chat is stored in `chatMessages`. Chat endpoints allow only the booking
   owner or assigned driver, rate-limit reads/writes, and accept text plus guarded
   image/audio data URL attachments for later media UI.
+- The live tracker is rendered from inside booking surfaces but displayed via a portal.
+  Chat forms inside the portal must call `event.stopPropagation()` after
+  `event.preventDefault()` so chat submission never bubbles into the parent booking
+  form and creates a duplicate ride request.
+- Active customer bookings are remembered with `taxilao_last_booking_id`; dismissed
+  active trackers are tracked with `taxilao_dismissed_booking_ids` as a list, not a
+  single id, so older active orders do not reappear after a new booking. Completed or
+  cancelled bookings must not remain cached as the last active booking.
+- Customer live status uses SSE from `/bookings/:id/events` plus a polling fallback to
+  `/bookings/:id`; do not remove the fallback because proxies, local dev servers, or
+  browsers may delay or cancel event streams.
+- MapLibre live maps must not mount React roots inside marker DOM. Use plain DOM
+  elements for markers, and sanitize route geometry so null/non-number coordinates are
+  not passed into MapLibre.
 - A meter price shown before booking is an estimate. `finalPriceLak` remains unset until
   a later trip-completion/meter-settlement workflow records the actual fare.
 - Customer pickup and destination points can be selected precisely in a lazy-loaded

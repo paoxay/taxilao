@@ -40,6 +40,50 @@ const dispatchOfferTimeoutMs = Number(process.env.DISPATCH_OFFER_TIMEOUT_MS || 3
 const defaultDriverCommissionPercent = 10;
 const defaultDriverMinimumBalanceLak = 20000;
 const defaultDriverLowBalanceWarningLak = 50000;
+const defaultVehicleCategories = [
+  {
+    id: "vehicle-suv",
+    code: "suv",
+    name: "SUV",
+    nameLo: "ລົດ SUV",
+    description: "ລົດສ່ວນຕົວກວ້າງ ເໝາະສຳລັບເດີນທາງໃນເມືອງ ແລະຂ້າມແຂວງ",
+    capacity: 4,
+    ratePerKmLak: 15000,
+    minimumFareLak: 50000,
+    sortOrder: 1,
+    active: true,
+    visibleOnWeb: true,
+    default: true
+  },
+  {
+    id: "vehicle-motorbike",
+    code: "motorbike",
+    name: "Motorbike Taxi",
+    nameLo: "ລົດຈັກແທັກຊີ",
+    description: "ໄວ ປະຢັດ ເໝາະສຳລັບໄປຄົນດຽວໃນເມືອງ",
+    capacity: 1,
+    ratePerKmLak: 8000,
+    minimumFareLak: 20000,
+    sortOrder: 2,
+    active: true,
+    visibleOnWeb: true,
+    default: false
+  },
+  {
+    id: "vehicle-delivery",
+    code: "delivery",
+    name: "Delivery Rider",
+    nameLo: "ລົດຂົນສົ່ງໄລເດີ",
+    description: "ສຳລັບຮັບສົ່ງຂອງ ຫຼືພັດສະດຸຂະໜາດນ້ອຍ",
+    capacity: 1,
+    ratePerKmLak: 10000,
+    minimumFareLak: 25000,
+    sortOrder: 3,
+    active: true,
+    visibleOnWeb: true,
+    default: false
+  }
+];
 const additionalCorsOrigins = String(process.env.ADDITIONAL_CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -628,10 +672,12 @@ async function calculateRoute(pickupCoordinates, dropoffCoordinates, driverId) {
     };
   }
 
+  const vehicleCategory = driverId ? null : await getVehicleCategoryForBooking(vehicleCategoryId);
   return {
     ...route,
-    estimatedPriceLak: await calculateBookingPrice(route.distanceKm, driverId),
+    estimatedPriceLak: await calculateBookingPrice(route.distanceKm, driverId, "FIXED", route.durationMinutes, vehicleCategory),
     meterEstimatedPriceLak: await calculateBookingPrice(route.distanceKm, driverId, "METER", route.durationMinutes),
+    vehicleCategory: vehicleCategory ? publicVehicleCategory(vehicleCategory) : null,
     pricing: await getPricingSettings()
   };
 }
@@ -653,7 +699,92 @@ async function getPricingSettings() {
   };
 }
 
-async function calculateBookingPrice(distanceKm, driverId, fareMode = "FIXED", durationMinutes = 0) {
+function publicVehicleCategory(category) {
+  return {
+    id: category.id,
+    code: category.code || category.id,
+    name: category.name || category.nameLo || "Vehicle",
+    nameLo: category.nameLo || category.name || "ລົດ",
+    description: category.description || "",
+    capacity: Number(category.capacity || 1),
+    ratePerKmLak: Number(category.ratePerKmLak || 15000),
+    minimumFareLak: Number(category.minimumFareLak || 50000),
+    sortOrder: Number(category.sortOrder || 0),
+    active: category.active !== false,
+    visibleOnWeb: category.visibleOnWeb !== false,
+    default: Boolean(category.default),
+    createdAt: category.createdAt || null,
+    updatedAt: category.updatedAt || null
+  };
+}
+
+function sanitizeVehicleCategoryPayload(body, existing = null) {
+  const code = String(body.code ?? existing?.code ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const name = String(body.name ?? existing?.name ?? "").trim().slice(0, 80);
+  const nameLo = String(body.nameLo ?? existing?.nameLo ?? name).trim().slice(0, 80);
+  const description = String(body.description ?? existing?.description ?? "").trim().slice(0, 300);
+  const capacity = Number(body.capacity ?? existing?.capacity ?? 1);
+  const ratePerKmLak = Number(body.ratePerKmLak ?? existing?.ratePerKmLak ?? 15000);
+  const minimumFareLak = Number(body.minimumFareLak ?? existing?.minimumFareLak ?? 50000);
+  const sortOrder = Number(body.sortOrder ?? existing?.sortOrder ?? 0);
+
+  if (!code || !name || !nameLo) {
+    const error = new Error("Vehicle code, name, and Lao name are required");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (
+    !Number.isFinite(capacity) || capacity < 1 || capacity > 50 ||
+    !Number.isFinite(ratePerKmLak) || ratePerKmLak < 1 ||
+    !Number.isFinite(minimumFareLak) || minimumFareLak < 1 ||
+    !Number.isFinite(sortOrder)
+  ) {
+    const error = new Error("Vehicle pricing and capacity must be valid numbers");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    code,
+    name,
+    nameLo,
+    description,
+    capacity: Math.round(capacity),
+    ratePerKmLak: Math.round(ratePerKmLak),
+    minimumFareLak: Math.round(minimumFareLak),
+    sortOrder: Math.round(sortOrder),
+    active: body.active !== undefined ? body.active !== false : existing?.active !== false,
+    visibleOnWeb: body.visibleOnWeb !== undefined ? body.visibleOnWeb !== false : existing?.visibleOnWeb !== false,
+    default: Boolean(body.default ?? existing?.default)
+  };
+}
+
+async function getDefaultVehicleCategory() {
+  const category = await db.collection("vehicleCategories").findOne(
+    { active: { $ne: false }, visibleOnWeb: { $ne: false } },
+    { sort: { default: -1, sortOrder: 1, createdAt: 1 } }
+  );
+  return category || defaultVehicleCategories[0];
+}
+
+async function getVehicleCategoryForBooking(vehicleCategoryId, { fallbackToDefault = true } = {}) {
+  const id = String(vehicleCategoryId || "").trim();
+  if (id) {
+    const category = await db.collection("vehicleCategories").findOne({ id, active: { $ne: false }, visibleOnWeb: { $ne: false } });
+    if (category) return category;
+    const error = new Error("Vehicle category not found or inactive");
+    error.statusCode = 404;
+    throw error;
+  }
+  return fallbackToDefault ? getDefaultVehicleCategory() : null;
+}
+
+async function calculateBookingPrice(distanceKm, driverId, fareMode = "FIXED", durationMinutes = 0, vehicleCategory = null) {
   const pricing = await getPricingSettings();
   if (fareMode === "METER") return calculateMeterPrice(distanceKm, durationMinutes, pricing);
   let ratePerKm = pricing.ratePerKmLak;
@@ -665,6 +796,9 @@ async function calculateBookingPrice(distanceKm, driverId, fareMode = "FIXED", d
       ratePerKm = Number(driver.ratePerKmLak || ratePerKm);
       minimumFare = Number(driver.minimumFareLak || minimumFare);
     }
+  } else if (vehicleCategory) {
+    ratePerKm = Number(vehicleCategory.ratePerKmLak || ratePerKm);
+    minimumFare = Number(vehicleCategory.minimumFareLak || minimumFare);
   }
 
   return calculateUrbanPrice(distanceKm, ratePerKm, minimumFare);
@@ -700,6 +834,42 @@ function publicUser(user) {
   };
 }
 
+
+function isSuspendedMember(user) {
+  return user?.role === "USER" && String(user.status || "ACTIVE").toUpperCase() === "SUSPENDED";
+}
+
+async function requireActiveMember(req, res, next) {
+  try {
+    if (req.user?.role !== "USER") return res.status(403).json({ message: "Member account required" });
+    const user = await db.collection("users").findOne({ id: req.user.id, role: "USER" });
+    if (!user) return res.status(404).json({ message: "Member account not found" });
+    if (isSuspendedMember(user)) return res.status(403).json({ message: "Member account is suspended" });
+    req.member = user;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}function publicAdminUser(user) {
+  return {
+    id: user.id,
+    email: user.email || "",
+    name: user.name || "",
+    avatarUrl: user.avatarUrl || "",
+    role: user.role || "USER",
+    status: user.status || "ACTIVE",
+    provider: user.provider || "google",
+    customerRating: Number(user.customerRating || 5),
+    customerReviewCount: Number(user.customerReviewCount || 0),
+    completedTrips: Number(user.completedTrips || user.completedBookings || 0),
+    bookingCount: Number(user.bookingCount || 0),
+    activeBookings: Number(user.activeBookings || 0),
+    totalSpentLak: Number(user.totalSpentLak || 0),
+    createdAt: user.createdAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    updatedAt: user.updatedAt || null
+  };
+}
 function signMemberTokens(user) {
   const payload = publicUser(user);
   return {
@@ -850,6 +1020,76 @@ function publicChatMessage(message) {
   };
 }
 
+function normalizeReviewInput(rating, comment) {
+  const numericRating = Number(rating);
+  const cleanComment = String(comment || "").trim().slice(0, 700);
+  if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
+    const error = new Error("Rating must be between 1 and 5");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!cleanComment) {
+    const error = new Error("Review comment is required");
+    error.statusCode = 400;
+    throw error;
+  }
+  return { rating: Math.round(numericRating), comment: cleanComment };
+}
+
+async function refreshDriverRating(driverId) {
+  const stats = await db.collection("reviews").aggregate([
+    { $match: { driverId, targetType: "DRIVER", hidden: { $ne: true } } },
+    { $group: { _id: "$driverId", average: { $avg: "$rating" }, count: { $sum: 1 } } }
+  ]).next();
+  await db.collection("drivers").updateOne(
+    { id: driverId },
+    {
+      $set: {
+        rating: Number((stats?.average || 0).toFixed(2)),
+        reviewCount: Number(stats?.count || 0),
+        updatedAt: new Date()
+      }
+    }
+  );
+}
+
+async function refreshCustomerRating(userId) {
+  const stats = await db.collection("reviews").aggregate([
+    { $match: { userId, targetType: "CUSTOMER", hidden: { $ne: true } } },
+    { $group: { _id: "$userId", average: { $avg: "$rating" }, count: { $sum: 1 } } }
+  ]).next();
+  await db.collection("users").updateOne(
+    { id: userId },
+    {
+      $set: {
+        customerRating: Number((stats?.average || 5).toFixed(2)),
+        customerReviewCount: Number(stats?.count || 0),
+        updatedAt: new Date()
+      }
+    }
+  );
+}
+
+function publicDriverBooking(booking, driverId) {
+  const contactVisible = booking.driverId === driverId && ["CONFIRMED", "ON_THE_WAY", "IN_PROGRESS", "COMPLETED"].includes(booking.status);
+  return {
+    ...booking,
+    customerPhone: contactVisible ? booking.customerPhone || "" : "",
+    customerWhatsapp: contactVisible ? booking.customerWhatsapp || "" : "",
+    customerEmail: contactVisible ? booking.customerEmail || "" : "",
+    note: contactVisible ? booking.note || "" : "",
+    customerContactVisible: contactVisible,
+    customerDisplay: {
+      name: booking.customerName || booking.user?.name || "TAXILAO customer",
+      avatarUrl: booking.user?.avatarUrl || "",
+      rating: Number(booking.user?.customerRating || 5),
+      trips: Number(booking.user?.completedTrips || 0)
+    },
+    user: undefined,
+    payment: undefined
+  };
+}
+
 async function seedIfEmpty() {
   await db.collection("drivers").createIndex({ id: 1 }, { unique: true });
   await db.collection("drivers").createIndex({ username: 1 }, { unique: true, sparse: true });
@@ -858,6 +1098,8 @@ async function seedIfEmpty() {
   await db.collection("payments").createIndex({ id: 1 }, { unique: true });
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
   await db.collection("settings").createIndex({ id: 1 }, { unique: true });
+  await db.collection("vehicleCategories").createIndex({ id: 1 }, { unique: true });
+  await db.collection("vehicleCategories").createIndex({ code: 1 }, { unique: true });
   await db.collection("chatMessages").createIndex({ id: 1 }, { unique: true });
   await db.collection("chatMessages").createIndex({ bookingId: 1, createdAt: 1 });
   await db.collection("driverLedger").createIndex({ id: 1 }, { unique: true });
@@ -908,6 +1150,23 @@ async function seedIfEmpty() {
     await db.collection("settings").updateOne(
       { id: "pricing", [field]: { $exists: false } },
       { $set: { [field]: value, updatedAt: new Date() } }
+    );
+  }
+
+  if ((await db.collection("vehicleCategories").countDocuments()) === 0) {
+    await db.collection("vehicleCategories").insertMany(
+      defaultVehicleCategories.map((category) => ({ ...category, createdAt: new Date(), updatedAt: new Date() }))
+    );
+  }
+
+  for (const category of defaultVehicleCategories) {
+    await db.collection("vehicleCategories").updateOne(
+      { id: category.id },
+      {
+        $setOnInsert: { ...category, createdAt: new Date() },
+        $set: { updatedAt: new Date() }
+      },
+      { upsert: true }
     );
   }
 
@@ -1065,18 +1324,19 @@ async function assertDriverCanAcceptBooking(driverId, booking) {
 }
 
 async function adjustDriverWallet({ driverId, amountLak, type, note, actorId, bookingId = null, metadata = {} }) {
-  const amount = Math.round(Number(amountLak || 0));
+  const amount = Math.round(Number(String(amountLak || 0).replace(/[,\s]/g, "")));
   if (!Number.isFinite(amount) || amount <= 0) {
     const error = new Error("Wallet amount must be greater than zero");
     error.statusCode = 400;
     throw error;
   }
+
   const signedAmount = ["ADMIN_DEBIT", "COMMISSION_DEBIT"].includes(type) ? -amount : amount;
   const now = new Date();
-  const driverFilter = { id: driverId, active: { $ne: false } };
+  const driverFilter = ["ADMIN_CREDIT", "ADMIN_DEBIT"].includes(type) ? { id: driverId } : { id: driverId, active: { $ne: false } };
   if (signedAmount < 0) driverFilter.walletBalanceLak = { $gte: amount };
 
-  const driver = await db.collection("drivers").findOneAndUpdate(
+  const walletUpdateResult = await db.collection("drivers").findOneAndUpdate(
     driverFilter,
     {
       $inc: { walletBalanceLak: signedAmount },
@@ -1084,9 +1344,11 @@ async function adjustDriverWallet({ driverId, amountLak, type, note, actorId, bo
     },
     { returnDocument: "after" }
   );
+  const driver = walletUpdateResult?.value || walletUpdateResult;
   if (!driver) {
-    const error = new Error("ຍອດເງິນບໍ່ພໍ ຫຼື ບໍ່ພົບຄົນຂັບ");
-    error.statusCode = 402;
+    const existingDriver = await db.collection("drivers").findOne({ id: driverId });
+    const error = new Error(existingDriver ? "Driver wallet balance is not enough" : "Driver not found");
+    error.statusCode = existingDriver ? 402 : 404;
     throw error;
   }
 
@@ -1098,7 +1360,7 @@ async function adjustDriverWallet({ driverId, amountLak, type, note, actorId, bo
     amountLak: amount,
     signedAmountLak: signedAmount,
     balanceAfterLak: Number(driver.walletBalanceLak || 0),
-    note: note || "",
+    note: note || "Manual wallet adjustment",
     actorId,
     metadata,
     createdAt: now
@@ -1109,7 +1371,7 @@ async function adjustDriverWallet({ driverId, amountLak, type, note, actorId, bo
     action: `DRIVER_WALLET_${type}`,
     targetId: driverId,
     actorId,
-    metadata: { amountLak: amount, signedAmountLak: signedAmount, bookingId, note: note || "" },
+    metadata: { amountLak: amount, signedAmountLak: signedAmount, bookingId, note: ledger.note },
     createdAt: now
   });
 
@@ -1301,12 +1563,18 @@ async function getBookingLiveView(bookingId, userId = null) {
         durationMinutes: 1,
         status: 1,
         estimatedPriceLak: 1,
+        vehicleCategoryId: 1,
+        vehicleCategoryName: 1,
+        vehicleCategorySnapshot: 1,
         createdAt: 1,
         updatedAt: 1,
         acceptedAt: 1,
         onTheWayAt: 1,
         startedAt: 1,
         completedAt: 1,
+        cancelledAt: 1,
+        cancelledBy: 1,
+        cancellationReason: 1,
         driverLocation: 1,
         "driver.id": 1,
         "driver.name": 1,
@@ -1487,6 +1755,17 @@ app.get("/maps/reverse", mapsLimiter, async (req, res, next) => {
   }
 });
 
+app.get("/vehicle-categories", async (_req, res, next) => {
+  try {
+    const categories = await db.collection("vehicleCategories")
+      .find({ active: { $ne: false }, visibleOnWeb: { $ne: false } })
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .toArray();
+    res.json(categories.map(publicVehicleCategory));
+  } catch (error) {
+    next(error);
+  }
+});
 app.post("/maps/route", mapsLimiter, async (req, res, next) => {
   try {
     const pickupCoordinates = parseCoordinates(req.body.pickupCoordinates);
@@ -1495,7 +1774,7 @@ app.post("/maps/route", mapsLimiter, async (req, res, next) => {
       return res.status(400).json({ message: "Valid pickup and destination coordinates are required" });
     }
 
-    res.json(await calculateRoute(pickupCoordinates, dropoffCoordinates, req.body.driverId || null));
+    res.json(await calculateRoute(pickupCoordinates, dropoffCoordinates, req.body.driverId || null, req.body.vehicleCategoryId || null));
   } catch (error) {
     next(error);
   }
@@ -1538,6 +1817,7 @@ app.get(
         return res.redirect(`${webOrigin}/login?error=google_login_failed`);
       }
 
+      if (isSuspendedMember(user)) return res.redirect(`${webOrigin}/login?error=account_suspended`);
       const { accessToken, refreshToken } = signMemberTokens(user);
       const fragment = new URLSearchParams({
         accessToken,
@@ -1549,11 +1829,9 @@ app.get(
   }
 );
 
-app.get("/auth/me", authenticate, async (req, res, next) => {
+app.get("/auth/me", authenticate, requireActiveMember, async (req, res, next) => {
   try {
-    const user = await db.collection("users").findOne({ id: req.user.id });
-    if (!user) return res.status(404).json({ message: "Member account not found" });
-    return res.json(publicUser(user));
+    return res.json(publicUser(req.member));
   } catch (error) {
     return next(error);
   }
@@ -1567,6 +1845,7 @@ app.post("/auth/refresh", loginLimiter, async (req, res, next) => {
     const payload = jwt.verify(refreshToken, refreshSecret);
     const user = await db.collection("users").findOne({ id: payload.id, role: "USER" });
     if (!user) return res.status(401).json({ message: "Member account not found" });
+    if (isSuspendedMember(user)) return res.status(403).json({ message: "Member account is suspended" });
 
     return res.json(signMemberTokens(user));
   } catch (error) {
@@ -1735,7 +2014,7 @@ app.get("/tours", async (_req, res, next) => {
   }
 });
 
-app.post("/bookings", bookingLimiter, authenticate, async (req, res, next) => {
+app.post("/bookings", bookingLimiter, authenticate, requireActiveMember, async (req, res, next) => {
   try {
     const {
       driverId,
@@ -1749,6 +2028,7 @@ app.post("/bookings", bookingLimiter, authenticate, async (req, res, next) => {
       customerPhone,
       customerWhatsapp,
       customerEmail,
+      vehicleCategoryId,
       pickupCoordinates: requestedPickupCoordinates,
       dropoffCoordinates: requestedDropoffCoordinates,
       bookingIntent,
@@ -1772,6 +2052,7 @@ app.post("/bookings", bookingLimiter, authenticate, async (req, res, next) => {
     }
 
     const bookingDriverId = driverId || tour?.driverId || null;
+    const bookingVehicleCategory = !tour && !bookingDriverId ? await getVehicleCategoryForBooking(vehicleCategoryId) : null;
     const fareMode = tour ? "FIXED" : (bookingDriverId ? "METER" : "FIXED");
     if (fareMode === "METER" && meterTermsAccepted !== true) {
       return res.status(400).json({ message: "Meter pricing terms must be accepted" });
@@ -1779,14 +2060,14 @@ app.post("/bookings", bookingLimiter, authenticate, async (req, res, next) => {
     const pickupCoordinates = parseCoordinates(requestedPickupCoordinates);
     const dropoffCoordinates = parseCoordinates(requestedDropoffCoordinates);
     const calculatedRoute = !tour && pickupCoordinates && dropoffCoordinates
-      ? await calculateRoute(pickupCoordinates, dropoffCoordinates, bookingDriverId)
+      ? await calculateRoute(pickupCoordinates, dropoffCoordinates, bookingDriverId, bookingVehicleCategory?.id || null)
       : null;
     const finalDistanceKm = tour ? Number(distanceKm || 0) : Number(calculatedRoute?.distanceKm || distanceKm || 0);
     const finalDurationMinutes = Number(calculatedRoute?.durationMinutes || 0);
     const pricingSnapshot = await getPricingSettings();
     const estimatedPriceLak = tour
       ? Number(tour.priceLak || 0)
-      : Number(await calculateBookingPrice(finalDistanceKm, bookingDriverId, fareMode, finalDurationMinutes));
+      : Number(await calculateBookingPrice(finalDistanceKm, bookingDriverId, fareMode, finalDurationMinutes, bookingVehicleCategory));
     const booking = {
       id: randomUUID(),
       userId,
@@ -1794,6 +2075,9 @@ app.post("/bookings", bookingLimiter, authenticate, async (req, res, next) => {
       tourId: tour?.id || null,
       tourTitle: tour?.title || "",
       driverId: bookingDriverId,
+      vehicleCategoryId: bookingVehicleCategory?.id || null,
+      vehicleCategoryName: bookingVehicleCategory?.nameLo || bookingVehicleCategory?.name || "",
+      vehicleCategorySnapshot: bookingVehicleCategory ? publicVehicleCategory(bookingVehicleCategory) : null,
       pickup,
       dropoff: dropoff || "",
       pickupLocation: pickupCoordinates ? { type: "Point", coordinates: [pickupCoordinates.longitude, pickupCoordinates.latitude] } : null,
@@ -1900,6 +2184,11 @@ app.post("/bookings/lookup", lookupLimiter, async (req, res, next) => {
           customerPhone: 1,
           customerWhatsapp: 1,
           note: 1,
+          driverReview: 1,
+          customerReview: 1,
+          cancelledAt: 1,
+          cancelledBy: 1,
+          cancellationReason: 1,
           createdAt: 1,
           "driver.id": 1,
           "driver.name": 1,
@@ -1925,7 +2214,7 @@ app.post("/bookings/lookup", lookupLimiter, async (req, res, next) => {
   }
 });
 
-app.get("/bookings/me", authenticate, async (req, res, next) => {
+app.get("/bookings/me", authenticate, requireActiveMember, async (req, res, next) => {
   try {
     const bookings = await db.collection("bookings").aggregate([
       { $match: { userId: req.user.id } },
@@ -1969,6 +2258,11 @@ app.get("/bookings/me", authenticate, async (req, res, next) => {
           customerPhone: 1,
           customerWhatsapp: 1,
           note: 1,
+          driverReview: 1,
+          customerReview: 1,
+          cancelledAt: 1,
+          cancelledBy: 1,
+          cancellationReason: 1,
           createdAt: 1,
           "driver.id": 1,
           "driver.name": 1,
@@ -1992,7 +2286,18 @@ app.get("/bookings/me", authenticate, async (req, res, next) => {
   }
 });
 
-app.get("/bookings/:id/events", authenticate, async (req, res, next) => {
+app.get("/bookings/:id", authenticate, requireActiveMember, async (req, res, next) => {
+  try {
+    if (req.user?.role !== "USER") return res.status(403).json({ message: "Member account required" });
+    const booking = await getBookingLiveView(req.params.id, req.user.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    res.json(booking);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/bookings/:id/events", authenticate, requireActiveMember, async (req, res, next) => {
   try {
     if (req.user?.role !== "USER") return res.status(403).json({ message: "Member account required" });
     const booking = await getBookingLiveView(req.params.id, req.user.id);
@@ -2136,9 +2441,17 @@ app.get("/driver/bookings", driverReadLimiter, requireDriver, async (req, res, n
           as: "payment"
         }
       },
-      { $addFields: { payment: { $first: "$payment" } } }
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "id",
+          as: "user"
+        }
+      },
+      { $addFields: { payment: { $first: "$payment" }, user: { $first: "$user" } } }
     ]).toArray();
-    res.json(bookings);
+    res.json(bookings.map((booking) => publicDriverBooking(booking, req.user.driverId)));
   } catch (error) {
     next(error);
   }
@@ -2199,6 +2512,8 @@ app.patch("/driver/bookings/:id/status", driverWriteLimiter, requireDriver, asyn
     } else if (status === "CANCELLED") {
       filter.status = { $nin: ["COMPLETED", "CANCELLED"] };
       updates.cancelledAt = now;
+      updates.cancelledBy = "DRIVER";
+      updates.cancellationReason = String(req.body.reason || "Driver cancelled the ride").trim().slice(0, 300);
     }
 
     const result = await db.collection("bookings").updateOne(filter, { $set: updates });
@@ -2286,7 +2601,7 @@ app.patch("/driver/bookings/:id/location", driverLocationLimiter, requireDriver,
   }
 });
 
-app.patch("/bookings/:id/status", authenticate, async (req, res, next) => {
+app.patch("/bookings/:id/status", authenticate, requireActiveMember, async (req, res, next) => {
   try {
     const status = req.body.status;
     if (req.user?.role !== "USER" || status !== "CANCELLED") {
@@ -2295,7 +2610,15 @@ app.patch("/bookings/:id/status", authenticate, async (req, res, next) => {
 
     const result = await db.collection("bookings").updateOne(
       { id: req.params.id, userId: req.user.id, status: { $in: ["PENDING", "OFFERED"] } },
-      { $set: { status, cancelledAt: new Date(), updatedAt: new Date() } }
+      {
+        $set: {
+          status,
+          cancelledAt: new Date(),
+          cancelledBy: "USER",
+          cancellationReason: "Customer cancelled before driver accepted",
+          updatedAt: new Date()
+        }
+      }
     );
     const booking = await db.collection("bookings").findOne({ id: req.params.id, userId: req.user.id });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
@@ -2309,7 +2632,7 @@ app.patch("/bookings/:id/status", authenticate, async (req, res, next) => {
   }
 });
 
-app.get("/bookings/:id/chat", chatReadLimiter, authenticate, async (req, res, next) => {
+app.get("/bookings/:id/chat", chatReadLimiter, authenticate, requireActiveMember, async (req, res, next) => {
   try {
     await getAuthorizedChatBooking(req, req.params.id);
     const messages = await db.collection("chatMessages")
@@ -2323,7 +2646,7 @@ app.get("/bookings/:id/chat", chatReadLimiter, authenticate, async (req, res, ne
   }
 });
 
-app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, async (req, res, next) => {
+app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, requireActiveMember, async (req, res, next) => {
   try {
     const booking = await getAuthorizedChatBooking(req, req.params.id, { requireActive: true });
     const text = String(req.body.text || "").trim().slice(0, 1200);
@@ -2355,7 +2678,7 @@ app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, async (req, res, 
   }
 });
 
-app.post("/reviews", authenticate, async (req, res, next) => {
+app.post("/reviews", authenticate, requireActiveMember, async (req, res, next) => {
   try {
     const { driverId, rating, comment } = req.body;
     if (!driverId || !rating || !comment) {
@@ -2366,6 +2689,8 @@ app.post("/reviews", authenticate, async (req, res, next) => {
       id: randomUUID(),
       userId: req.user.id,
       driverId,
+      targetType: "DRIVER",
+      fromRole: "USER",
       rating: Number(rating),
       comment,
       hidden: false,
@@ -2373,11 +2698,95 @@ app.post("/reviews", authenticate, async (req, res, next) => {
     };
 
     await db.collection("reviews").insertOne(review);
-    await db.collection("drivers").updateOne(
-      { id: driverId },
-      { $inc: { reviewCount: 1 }, $set: { updatedAt: new Date() } }
-    );
+    await refreshDriverRating(driverId);
     res.status(201).json(review);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/bookings/:id/review", authenticate, requireActiveMember, async (req, res, next) => {
+  try {
+    if (req.user?.role !== "USER") {
+      return res.status(403).json({ message: "Member account required" });
+    }
+    const { rating, comment } = normalizeReviewInput(req.body.rating, req.body.comment);
+    const booking = await db.collection("bookings").findOne({ id: req.params.id, userId: req.user.id });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.status !== "COMPLETED") {
+      return res.status(409).json({ message: "Review is available after trip completion" });
+    }
+    if (!booking.driverId) return res.status(409).json({ message: "This booking has no driver to review" });
+    if (booking.driverReview?.rating) {
+      return res.status(409).json({ message: "You already reviewed this driver" });
+    }
+
+    const review = {
+      id: randomUUID(),
+      bookingId: booking.id,
+      userId: req.user.id,
+      driverId: booking.driverId,
+      targetType: "DRIVER",
+      fromRole: "USER",
+      rating,
+      comment,
+      hidden: false,
+      createdAt: new Date()
+    };
+    const lockResult = await db.collection("bookings").updateOne(
+      { id: booking.id, "driverReview.rating": { $exists: false } },
+      { $set: { driverReview: { rating, comment, reviewId: review.id, createdAt: review.createdAt }, updatedAt: new Date() } }
+    );
+    if (lockResult.modifiedCount === 0) {
+      return res.status(409).json({ message: "You already reviewed this driver" });
+    }
+    await db.collection("reviews").insertOne(review);
+    await refreshDriverRating(booking.driverId);
+    await emitBookingUpdate(booking.id);
+    res.status(201).json({ rating, comment, reviewId: review.id, createdAt: review.createdAt });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/driver/bookings/:id/review", driverWriteLimiter, requireDriver, async (req, res, next) => {
+  try {
+    const { rating, comment } = normalizeReviewInput(req.body.rating, req.body.comment);
+    const booking = await db.collection("bookings").findOne({ id: req.params.id, driverId: req.user.driverId });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.status !== "COMPLETED") {
+      return res.status(409).json({ message: "Customer review is available after trip completion" });
+    }
+    if (!booking.userId) return res.status(409).json({ message: "This booking has no member customer to review" });
+    if (booking.customerReview?.rating) {
+      return res.status(409).json({ message: "You already reviewed this customer" });
+    }
+
+    const driver = await db.collection("drivers").findOne({ id: req.user.driverId });
+    const review = {
+      id: randomUUID(),
+      bookingId: booking.id,
+      userId: booking.userId,
+      driverId: req.user.driverId,
+      targetType: "CUSTOMER",
+      fromRole: "DRIVER",
+      fromName: driver?.name || "Driver",
+      rating,
+      comment,
+      hidden: false,
+      createdAt: new Date()
+    };
+    const lockResult = await db.collection("bookings").updateOne(
+      { id: booking.id, "customerReview.rating": { $exists: false } },
+      { $set: { customerReview: { rating, comment, reviewId: review.id, createdAt: review.createdAt }, updatedAt: new Date() } }
+    );
+    if (lockResult.modifiedCount === 0) {
+      return res.status(409).json({ message: "You already reviewed this customer" });
+    }
+    await db.collection("reviews").insertOne(review);
+    await refreshCustomerRating(booking.userId);
+    await emitBookingUpdate(booking.id);
+    res.status(201).json({ rating, comment, reviewId: review.id, createdAt: review.createdAt });
   } catch (error) {
     next(error);
   }
@@ -2413,6 +2822,83 @@ app.get("/admin/dashboard", requireAdmin, async (_req, res, next) => {
   }
 });
 
+app.get("/admin/users", requireAdmin, async (_req, res, next) => {
+  try {
+    const users = await db.collection("users").aggregate([
+      { $match: { role: "USER" } },
+      {
+        $lookup: {
+          from: "bookings",
+          localField: "id",
+          foreignField: "userId",
+          as: "bookings"
+        }
+      },
+      {
+        $addFields: {
+          bookingCount: { $size: "$bookings" },
+          completedBookings: {
+            $size: {
+              $filter: { input: "$bookings", as: "booking", cond: { $eq: ["$$booking.status", "COMPLETED"] } }
+            }
+          },
+          activeBookings: {
+            $size: {
+              $filter: {
+                input: "$bookings",
+                as: "booking",
+                cond: { $in: ["$$booking.status", ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"]] }
+              }
+            }
+          },
+          totalSpentLak: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: { input: "$bookings", as: "booking", cond: { $eq: ["$$booking.status", "COMPLETED"] } }
+                },
+                as: "booking",
+                in: { $ifNull: ["$$booking.finalPriceLak", "$$booking.estimatedPriceLak"] }
+              }
+            }
+          }
+        }
+      },
+      { $project: { bookings: 0, passwordHash: 0, passwordSalt: 0 } },
+      { $sort: { activeBookings: -1, lastLoginAt: -1, createdAt: -1 } },
+      { $limit: 500 }
+    ]).toArray();
+    res.json(users.map(publicAdminUser));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/admin/users/:id/status", requireAdmin, async (req, res, next) => {
+  try {
+    const status = String(req.body.status || "").toUpperCase();
+    if (!["ACTIVE", "SUSPENDED"].includes(status)) {
+      return res.status(400).json({ message: "User status must be ACTIVE or SUSPENDED" });
+    }
+    const result = await db.collection("users").updateOne(
+      { id: req.params.id, role: "USER" },
+      { $set: { status, updatedAt: new Date() } }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ message: "Member not found" });
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "USER_STATUS_UPDATED",
+      targetId: req.params.id,
+      actorId: req.user.id,
+      metadata: { status },
+      createdAt: new Date()
+    });
+    const user = await db.collection("users").findOne({ id: req.params.id });
+    res.json(publicAdminUser(user));
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/admin/drivers", requireAdmin, async (_req, res, next) => {
   try {
     const drivers = await db.collection("drivers").find({}).sort({ verified: 1, premium: -1, createdAt: -1 }).toArray();
@@ -2440,16 +2926,13 @@ app.get("/admin/drivers/:id/wallet", requireAdmin, async (req, res, next) => {
 app.post("/admin/drivers/:id/wallet", requireAdmin, async (req, res, next) => {
   try {
     const direction = String(req.body.direction || "CREDIT").toUpperCase();
-    const amountLak = Number(req.body.amountLak);
-    const note = String(req.body.note || "").trim();
+    const amountLak = Number(String(req.body.amountLak || 0).replace(/[,\s]/g, ""));
+    const note = String(req.body.note || "Manual wallet adjustment from admin finance").trim();
     if (!["CREDIT", "DEBIT"].includes(direction)) {
       return res.status(400).json({ message: "Wallet direction must be CREDIT or DEBIT" });
     }
     if (!Number.isFinite(amountLak) || amountLak <= 0) {
       return res.status(400).json({ message: "Wallet amount must be greater than zero" });
-    }
-    if (!note || note.length < 3) {
-      return res.status(400).json({ message: "Wallet note is required" });
     }
 
     const { driver, ledger } = await adjustDriverWallet({
@@ -2467,6 +2950,96 @@ app.post("/admin/drivers/:id/wallet", requireAdmin, async (req, res, next) => {
   }
 });
 
+app.get("/admin/vehicle-categories", requireAdmin, async (_req, res, next) => {
+  try {
+    const categories = await db.collection("vehicleCategories")
+      .find({})
+      .sort({ sortOrder: 1, createdAt: 1 })
+      .toArray();
+    res.json(categories.map(publicVehicleCategory));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/admin/vehicle-categories", requireAdmin, async (req, res, next) => {
+  try {
+    const payload = sanitizeVehicleCategoryPayload(req.body);
+    const category = {
+      id: randomUUID(),
+      ...payload,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    const existing = await db.collection("vehicleCategories").findOne({ code: category.code });
+    if (existing) return res.status(409).json({ message: "Vehicle category code already exists" });
+    if (category.default) {
+      await db.collection("vehicleCategories").updateMany({ default: true }, { $set: { default: false, updatedAt: new Date() } });
+    }
+    await db.collection("vehicleCategories").insertOne(category);
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "VEHICLE_CATEGORY_CREATED",
+      targetId: category.id,
+      actorId: req.user.id,
+      metadata: { code: category.code, name: category.name },
+      createdAt: new Date()
+    });
+    res.status(201).json(publicVehicleCategory(category));
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ message: error.message || "Vehicle category save failed" });
+  }
+});
+
+app.patch("/admin/vehicle-categories/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const existing = await db.collection("vehicleCategories").findOne({ id: req.params.id });
+    if (!existing) return res.status(404).json({ message: "Vehicle category not found" });
+    const payload = sanitizeVehicleCategoryPayload(req.body, existing);
+    const duplicate = await db.collection("vehicleCategories").findOne({ code: payload.code, id: { $ne: req.params.id } });
+    if (duplicate) return res.status(409).json({ message: "Vehicle category code already exists" });
+    if (payload.default) {
+      await db.collection("vehicleCategories").updateMany({ id: { $ne: req.params.id }, default: true }, { $set: { default: false, updatedAt: new Date() } });
+    }
+    await db.collection("vehicleCategories").updateOne(
+      { id: req.params.id },
+      { $set: { ...payload, updatedAt: new Date() } }
+    );
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "VEHICLE_CATEGORY_UPDATED",
+      targetId: req.params.id,
+      actorId: req.user.id,
+      metadata: { code: payload.code, name: payload.name },
+      createdAt: new Date()
+    });
+    const category = await db.collection("vehicleCategories").findOne({ id: req.params.id });
+    res.json(publicVehicleCategory(category));
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ message: error.message || "Vehicle category update failed" });
+  }
+});
+
+app.delete("/admin/vehicle-categories/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const result = await db.collection("vehicleCategories").updateOne(
+      { id: req.params.id },
+      { $set: { active: false, visibleOnWeb: false, default: false, updatedAt: new Date() } }
+    );
+    if (!result.matchedCount) return res.status(404).json({ message: "Vehicle category not found" });
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "VEHICLE_CATEGORY_DISABLED",
+      targetId: req.params.id,
+      actorId: req.user.id,
+      metadata: {},
+      createdAt: new Date()
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/admin/pricing", requireAdmin, async (_req, res, next) => {
   try {
     res.json(await getPricingSettings());
@@ -2853,22 +3426,30 @@ app.patch("/admin/bookings/:id", requireAdmin, async (req, res, next) => {
       updates.distanceKm = distanceKm;
       const currentBooking = await db.collection("bookings").findOne({ id: req.params.id });
       const driverId = updates.driverId !== undefined ? updates.driverId : currentBooking?.driverId;
+      const vehicleCategory = !driverId && currentBooking?.vehicleCategoryId
+        ? await getVehicleCategoryForBooking(currentBooking.vehicleCategoryId, { fallbackToDefault: false })
+        : null;
       updates.estimatedPriceLak = await calculateBookingPrice(
         distanceKm,
         driverId,
         currentBooking?.fareMode || "FIXED",
-        currentBooking?.durationMinutes || 0
+        currentBooking?.durationMinutes || 0,
+        vehicleCategory
       );
     }
 
     if (req.body.driverId !== undefined && updates.estimatedPriceLak === undefined) {
       const currentBooking = await db.collection("bookings").findOne({ id: req.params.id });
       if (currentBooking?.bookingType !== "TOUR" && currentBooking?.distanceKm) {
+        const vehicleCategory = !updates.driverId && currentBooking.vehicleCategoryId
+          ? await getVehicleCategoryForBooking(currentBooking.vehicleCategoryId, { fallbackToDefault: false })
+          : null;
         updates.estimatedPriceLak = await calculateBookingPrice(
           currentBooking.distanceKm,
           updates.driverId,
           currentBooking.fareMode || "FIXED",
-          currentBooking.durationMinutes || 0
+          currentBooking.durationMinutes || 0,
+          vehicleCategory
         );
       }
     }

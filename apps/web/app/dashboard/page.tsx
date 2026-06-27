@@ -3,13 +3,14 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Banknote, CalendarCheck, Car, LogIn, LogOut, MapPin, Phone, RefreshCcw, Search, UserRound } from "lucide-react";
+import { Banknote, CalendarCheck, Car, LogIn, LogOut, MapPin, Phone, RefreshCcw, Search, Star, UserRound } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { Nav } from "../components";
 import { getApiUrl } from "../config";
 import { useUiCopy } from "../use-ui-copy";
 
 const RideLiveMap = dynamic(() => import("../ride-live-map").then((module) => module.RideLiveMap), { ssr: false });
+const RideLiveTracker = dynamic(() => import("../ride-live-tracker").then((module) => module.RideLiveTracker), { ssr: false });
 
 type PublicBooking = {
   id: string;
@@ -51,6 +52,16 @@ type PublicBooking = {
     method: string;
     status: string;
   };
+  driverReview?: {
+    rating: number;
+    comment: string;
+    createdAt?: string;
+  };
+  customerReview?: {
+    rating: number;
+    comment: string;
+    createdAt?: string;
+  };
 };
 
 type Member = {
@@ -64,6 +75,38 @@ type MemberTokens = {
   accessToken: string;
   refreshToken: string;
 };
+
+const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
+const liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
+const dismissedBookingKey = "taxilao_dismissed_booking_id";
+const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
+
+function getDismissedBookingIds() {
+  const ids = new Set<string>();
+  const legacyId = localStorage.getItem(dismissedBookingKey);
+  if (legacyId) ids.add(legacyId);
+  try {
+    const stored = JSON.parse(localStorage.getItem(dismissedBookingsKey) || "[]");
+    if (Array.isArray(stored)) {
+      stored.filter((id) => typeof id === "string" && id).forEach((id) => ids.add(id));
+    }
+  } catch {
+    // Ignore old malformed local data.
+  }
+  return ids;
+}
+
+function dismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds().add(id)).slice(-30);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  localStorage.setItem(dismissedBookingKey, id);
+}
+
+function undismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);
+}
 
 export default function UserDashboardPage() {
   const apiUrl = getApiUrl();
@@ -97,9 +140,18 @@ export default function UserDashboardPage() {
     ]);
 
     if (!memberResponse.ok) throw new Error("Session expired");
+    const nextBookings = bookingsResponse.ok ? await bookingsResponse.json() as PublicBooking[] : [];
     setMember(await memberResponse.json());
-    setMemberBookings(bookingsResponse.ok ? await bookingsResponse.json() : []);
+    setMemberBookings(nextBookings);
     setMemberToken(accessToken);
+    setBooking((current) => {
+      if (current) return nextBookings.find((item) => item.id === current.id) ?? current;
+      const savedId = localStorage.getItem("taxilao_last_booking_id");
+      const dismissedIds = getDismissedBookingIds();
+      return nextBookings.find((item) => item.id === savedId && !dismissedIds.has(item.id) && liveTrackerStatuses.includes(item.status))
+        ?? nextBookings.find((item) => activeStatuses.includes(item.status) && !dismissedIds.has(item.id))
+        ?? null;
+    });
   }
 
   async function restoreMemberSession() {
@@ -147,6 +199,7 @@ export default function UserDashboardPage() {
       setBooking(data);
       setStatus("success");
       setMessage(copy.searchBooking);
+      undismissBookingId(bookingId);
       localStorage.setItem("taxilao_last_booking_id", bookingId);
       localStorage.setItem("taxilao_last_booking_phone", phone);
     } catch (error) {
@@ -161,6 +214,14 @@ export default function UserDashboardPage() {
     setPhone(localStorage.getItem("taxilao_last_booking_phone") ?? "");
     void restoreMemberSession();
   }, []);
+
+  useEffect(() => {
+    if (!booking) return;
+    localStorage.setItem("taxilao_last_booking_id", booking.id);
+    if (booking.customerPhone || booking.customerWhatsapp) {
+      localStorage.setItem("taxilao_last_booking_phone", booking.customerPhone || booking.customerWhatsapp || "");
+    }
+  }, [booking]);
 
   useEffect(() => {
     if (!booking || !memberToken || ["COMPLETED", "CANCELLED"].includes(booking.status)) return;
@@ -245,7 +306,11 @@ export default function UserDashboardPage() {
             </div>
           ) : null}
 
-          {booking ? <BookingSummary booking={booking} copy={copy} statusLabels={statusLabels} /> : null}
+          {booking ? <BookingSummary booking={booking} copy={copy} statusLabels={statusLabels} apiUrl={apiUrl} memberToken={memberToken} onReviewed={(review) => {
+            const next = { ...booking, driverReview: review };
+            setBooking(next);
+            setMemberBookings((items) => items.map((item) => item.id === booking.id ? next : item));
+          }} /> : null}
         </div>
 
         <form className="booking-panel member-lookup" onSubmit={lookupBooking}>
@@ -269,11 +334,31 @@ export default function UserDashboardPage() {
           {message ? <p className={status === "error" ? "form-message error" : "form-message"}>{message}</p> : null}
         </form>
       </section>
+      {booking && memberToken && liveTrackerStatuses.includes(booking.status) ? (
+        <RideLiveTracker
+          apiUrl={apiUrl}
+          token={memberToken}
+          initialBooking={booking as any}
+          onClose={(closedBooking) => {
+            const nextBooking = (closedBooking as PublicBooking | undefined) || booking;
+            if (activeStatuses.includes(nextBooking.status)) {
+              setBooking(nextBooking);
+              localStorage.setItem("taxilao_last_booking_id", nextBooking.id);
+              return;
+            }
+            undismissBookingId(nextBooking.id);
+            if (nextBooking.id === localStorage.getItem("taxilao_last_booking_id")) {
+              localStorage.removeItem("taxilao_last_booking_id");
+            }
+            setBooking(null);
+          }}
+        />
+      ) : null}
     </main>
   );
 }
 
-function BookingSummary({ booking, copy, statusLabels }: { booking: PublicBooking; copy: ReturnType<typeof useUiCopy>["copy"]; statusLabels: Record<string, string> }) {
+function BookingSummary({ booking, copy, statusLabels, apiUrl, memberToken, onReviewed }: { booking: PublicBooking; copy: ReturnType<typeof useUiCopy>["copy"]; statusLabels: Record<string, string>; apiUrl: string; memberToken: string; onReviewed: (review: NonNullable<PublicBooking["driverReview"]>) => void }) {
   return (
     <div className="booking-result">
       <article className="booking-panel">
@@ -299,7 +384,71 @@ function BookingSummary({ booking, copy, statusLabels }: { booking: PublicBookin
             </div>
           </>
         ) : <p>{copy.noDriver}</p>}
+        {booking.status === "COMPLETED" && booking.driver ? (
+          <DriverReviewForm booking={booking} apiUrl={apiUrl} memberToken={memberToken} onReviewed={onReviewed} />
+        ) : null}
       </article>
+    </div>
+  );
+}
+
+function DriverReviewForm({ booking, apiUrl, memberToken, onReviewed }: { booking: PublicBooking; apiUrl: string; memberToken: string; onReviewed: (review: NonNullable<PublicBooking["driverReview"]>) => void }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(booking.driverReview ? "success" : "idle");
+  const [message, setMessage] = useState(booking.driverReview ? "ທ່ານໃຫ້ດາວຄົນຂັບແລ້ວ" : "");
+
+  async function submitReview() {
+    if (booking.driverReview || status === "loading") return;
+    if (!memberToken) {
+      setStatus("error");
+      setMessage("ກະລຸນາເຂົ້າລະບົບກ່ອນໃຫ້ດາວ");
+      return;
+    }
+    if (!comment.trim()) {
+      setStatus("error");
+      setMessage("ກະລຸນາໃສ່ຄຳເຫັນສັ້ນໆ");
+      return;
+    }
+    setStatus("loading");
+    setMessage("ກຳລັງບັນທຶກ...");
+    try {
+      const response = await fetch(`${apiUrl}/bookings/${booking.id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${memberToken}` },
+        body: JSON.stringify({ rating, comment })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Review failed");
+      const review = { rating, comment, createdAt: data.createdAt };
+      onReviewed(review);
+      setStatus("success");
+      setMessage("ຂອບໃຈ ບັນທຶກຄະແນນແລ້ວ");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Review failed");
+    }
+  }
+
+  const disabled = Boolean(booking.driverReview) || status === "loading";
+  return (
+    <div className="driver-review-box">
+      <div>
+        <p className="eyebrow">RATING</p>
+        <h3>ໃຫ້ດາວຄົນຂັບ</h3>
+      </div>
+      <div className="review-stars" aria-label="rating">
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button disabled={disabled} key={value} onClick={() => setRating(value)} type="button">
+            <Star size={22} fill={value <= rating ? "currentColor" : "none"} />
+          </button>
+        ))}
+      </div>
+      <textarea disabled={disabled} value={booking.driverReview?.comment ?? comment} onChange={(event) => setComment(event.target.value)} placeholder="ຂຽນຄຳເຫັນກ່ຽວກັບຄົນຂັບ..." />
+      <button className="btn btn-primary" disabled={disabled} onClick={submitReview} type="button">
+        {booking.driverReview ? "ໃຫ້ດາວແລ້ວ" : status === "loading" ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກຄະແນນ"}
+      </button>
+      {message ? <p className={status === "error" ? "form-message error" : "form-message"}>{message}</p> : null}
     </div>
   );
 }

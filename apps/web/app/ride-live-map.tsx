@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CarFront } from "lucide-react";
-import { createRoot, Root } from "react-dom/client";
 import maplibregl, { GeoJSONSource, Map as MapLibreMap, Marker } from "maplibre-gl";
 
 type PointLocation = {
@@ -29,11 +27,58 @@ function validCoordinates(location?: PointLocation | null): location is PointLoc
   );
 }
 
+
+function sanitizeRouteGeometry(routeGeometry?: { type: "LineString"; coordinates: [number, number][] } | null) {
+  const coordinates = routeGeometry?.coordinates?.filter((coordinate): coordinate is [number, number] => (
+    Array.isArray(coordinate) &&
+    Number.isFinite(coordinate[0]) &&
+    Number.isFinite(coordinate[1])
+  ));
+  return coordinates && coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
+}
 function createPointMarker(className: string, label: string) {
   const element = document.createElement("div");
   element.className = `live-map-point ${className}`;
   element.textContent = label;
   return element;
+}
+
+function createDriverMarker() {
+  const element = document.createElement("div");
+  element.className = "live-driver-marker";
+  element.textContent = "TL";
+  return element;
+}
+
+function syncRouteLayer(map: MapLibreMap, routeGeometry?: { type: "LineString"; coordinates: [number, number][] } | null) {
+  const cleanGeometry = sanitizeRouteGeometry(routeGeometry);
+  const source = map.getSource("ride-route") as GeoJSONSource | undefined;
+  if (!cleanGeometry) {
+    if (map.getLayer("ride-route")) map.removeLayer("ride-route");
+    if (map.getLayer("ride-route-outline")) map.removeLayer("ride-route-outline");
+    if (source) map.removeSource("ride-route");
+    return;
+  }
+
+  const data = { type: "Feature" as const, properties: {}, geometry: cleanGeometry };
+  if (source) {
+    source.setData(data);
+    return;
+  }
+
+  map.addSource("ride-route", { type: "geojson", data });
+  map.addLayer({
+    id: "ride-route-outline",
+    type: "line",
+    source: "ride-route",
+    paint: { "line-color": "#07130d", "line-width": 7, "line-opacity": 0.55 }
+  });
+  map.addLayer({
+    id: "ride-route",
+    type: "line",
+    source: "ride-route",
+    paint: { "line-color": "#38d67d", "line-width": 4 }
+  });
 }
 
 export function RideLiveMap({
@@ -50,7 +95,6 @@ export function RideLiveMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const driverMarkerRef = useRef<Marker | null>(null);
-  const driverRootRef = useRef<Root | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -79,24 +123,7 @@ export function RideLiveMap({
     }
 
     map.on("load", () => {
-      if (routeGeometry?.coordinates?.length) {
-        map.addSource("ride-route", {
-          type: "geojson",
-          data: { type: "Feature", properties: {}, geometry: routeGeometry }
-        });
-        map.addLayer({
-          id: "ride-route-outline",
-          type: "line",
-          source: "ride-route",
-          paint: { "line-color": "#07130d", "line-width": 7, "line-opacity": 0.55 }
-        });
-        map.addLayer({
-          id: "ride-route",
-          type: "line",
-          source: "ride-route",
-          paint: { "line-color": "#38d67d", "line-width": 4 }
-        });
-      }
+      syncRouteLayer(map, routeGeometry);
 
       const bounds = new maplibregl.LngLatBounds();
       if (validCoordinates(pickupLocation)) bounds.extend(pickupLocation.coordinates);
@@ -111,8 +138,6 @@ export function RideLiveMap({
       markers.forEach((marker) => marker.remove());
       driverMarkerRef.current?.remove();
       driverMarkerRef.current = null;
-      driverRootRef.current?.unmount();
-      driverRootRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -123,13 +148,8 @@ export function RideLiveMap({
     if (!map || !validCoordinates(driverLocation)) return;
 
     if (!driverMarkerRef.current) {
-      const element = document.createElement("div");
-      element.className = "live-driver-marker";
-      const root = createRoot(element);
-      root.render(<CarFront size={22} />);
-      driverRootRef.current = root;
       driverMarkerRef.current = new maplibregl.Marker({
-        element,
+        element: createDriverMarker(),
         rotationAlignment: "map",
         pitchAlignment: "map"
       }).setLngLat(driverLocation.coordinates).addTo(map);
@@ -143,9 +163,15 @@ export function RideLiveMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded() || !routeGeometry) return;
-    const source = map.getSource("ride-route") as GeoJSONSource | undefined;
-    source?.setData({ type: "Feature", properties: {}, geometry: routeGeometry });
+    if (!map) return;
+    const updateRoute = () => syncRouteLayer(map, routeGeometry);
+    if (!map.isStyleLoaded()) {
+      map.once("load", updateRoute);
+      return () => {
+        map.off("load", updateRoute);
+      };
+    }
+    updateRoute();
   }, [routeGeometry]);
 
   return <div className="ride-live-map" ref={containerRef} />;

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { BadgeCheck, Ban, Banknote, CalendarDays, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, Trash2, UsersRound, X } from "lucide-react";
+import { BadgeCheck, Ban, Banknote, CalendarDays, Car, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, ShieldAlert, Trash2, UserRound, UsersRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { getApiUrl } from "./config";
 
@@ -51,6 +51,19 @@ type Tour = {
   sortOrder?: number;
 };
 
+
+type DriverLedgerEntry = {
+  id: string;
+  driverId: string;
+  bookingId?: string | null;
+  type: string;
+  amountLak: number;
+  signedAmountLak: number;
+  balanceAfterLak: number;
+  note?: string;
+  actorId?: string;
+  createdAt?: string;
+};
 type Payment = {
   id?: string;
   bookingId: string;
@@ -82,6 +95,26 @@ type Booking = {
   payment?: Payment;
 };
 
+type MemberUser = {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  role: string;
+  status: string;
+  provider?: string;
+  customerRating?: number;
+  customerReviewCount?: number;
+  completedTrips?: number;
+  completedBookings?: number;
+  bookingCount?: number;
+  activeBookings?: number;
+  totalSpentLak?: number;
+  createdAt?: string;
+  lastLoginAt?: string;
+  updatedAt?: string;
+};
+
 type Dashboard = {
   drivers: number;
   users: number;
@@ -91,6 +124,21 @@ type Dashboard = {
   revenueLak: number;
   paidRevenueLak: number;
   premiumDrivers: number;
+};
+
+type VehicleCategory = {
+  id: string;
+  code: string;
+  name: string;
+  nameLo: string;
+  description?: string;
+  capacity: number;
+  ratePerKmLak: number;
+  minimumFareLak: number;
+  sortOrder: number;
+  active?: boolean;
+  visibleOnWeb?: boolean;
+  default?: boolean;
 };
 
 type Pricing = {
@@ -105,14 +153,17 @@ type Pricing = {
   driverLowBalanceWarningLak: number;
 };
 
-type AdminSection = "dashboard" | "drivers" | "places" | "tours" | "bookings" | "payments";
+type AdminSection = "dashboard" | "users" | "drivers" | "finance" | "vehicles" | "places" | "tours" | "bookings" | "payments";
 
 const bookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const paymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED"];
 const paymentMethods = ["CASH", "BANK_QR", "CARD", "USDT_TRC20", "USDT_BEP20"];
 const adminSections: Array<{ id: AdminSection; label: string }> = [
   { id: "dashboard", label: "ໜ້າລວມ" },
+  { id: "users", label: "ສະມາຊິກ" },
   { id: "drivers", label: "ຄົນຂັບ" },
+  { id: "finance", label: "ການເງິນ" },
+  { id: "vehicles", label: "ຫມວດລົດ" },
   { id: "places", label: "ສະຖານທີ່" },
   { id: "tours", label: "ທົວ" },
   { id: "bookings", label: "ການຈອງ" },
@@ -125,6 +176,8 @@ export function AdminDashboard() {
   const [password, setPassword] = useState("");
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [tours, setTours] = useState<Tour[]>([]);
+  const [vehicleCategories, setVehicleCategories] = useState<VehicleCategory[]>([]);
+  const [users, setUsers] = useState<MemberUser[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -143,13 +196,22 @@ export function AdminDashboard() {
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTourId, setEditingTourId] = useState<string | null>(null);
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const driverFormRef = useRef<HTMLFormElement | null>(null);
   const tourFormRef = useRef<HTMLFormElement | null>(null);
+  const vehicleFormRef = useRef<HTMLFormElement | null>(null);
   const pricingFormRef = useRef<HTMLFormElement | null>(null);
   const [showDriverForm, setShowDriverForm] = useState(false);
   const [showTourForm, setShowTourForm] = useState(false);
+  const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [showPricingForm, setShowPricingForm] = useState(false);
+  const [financeDriverId, setFinanceDriverId] = useState("");
+  const [driverLedger, setDriverLedger] = useState<DriverLedgerEntry[]>([]);
+  const [walletDirection, setWalletDirection] = useState<"CREDIT" | "DEBIT">("CREDIT");
+  const [walletAmountLak, setWalletAmountLak] = useState("");
+  const [walletNote, setWalletNote] = useState("");
+  const [walletLoading, setWalletLoading] = useState(false);
   const [driverForm, setDriverForm] = useState({
     username: "",
     password: "",
@@ -168,6 +230,19 @@ export function AdminDashboard() {
     verified: false,
     premium: false,
     active: true
+  });
+  const [vehicleForm, setVehicleForm] = useState({
+    code: "",
+    name: "",
+    nameLo: "",
+    description: "",
+    capacity: "4",
+    ratePerKmLak: "15000",
+    minimumFareLak: "50000",
+    sortOrder: "0",
+    active: true,
+    visibleOnWeb: true,
+    default: false
   });
   const [tourForm, setTourForm] = useState({
     title: "",
@@ -207,7 +282,12 @@ export function AdminDashboard() {
   });
 
   const pendingDrivers = useMemo(() => drivers.filter((driver) => !driver.verified), [drivers]);
-
+  const suspendedUsers = useMemo(() => users.filter((user) => user.status === "SUSPENDED"), [users]);
+  const financeDriver = useMemo(() => drivers.find((driver) => driver.id === financeDriverId) || drivers[0] || null, [drivers, financeDriverId]);
+  const lowBalanceDrivers = useMemo(() => drivers.filter((driver) => driver.walletLowBalance), [drivers]);
+  const totalDriverWalletLak = useMemo(() => drivers.reduce((total, driver) => total + Number(driver.walletBalanceLak || 0), 0), [drivers]);
+  const ledgerCreditLak = useMemo(() => driverLedger.filter((entry) => entry.signedAmountLak > 0).reduce((total, entry) => total + Number(entry.amountLak || 0), 0), [driverLedger]);
+  const ledgerDebitLak = useMemo(() => driverLedger.filter((entry) => entry.signedAmountLak < 0).reduce((total, entry) => total + Number(entry.amountLak || 0), 0), [driverLedger]);
   function authHeaders() {
     return {
       "Content-Type": "application/json",
@@ -287,20 +367,24 @@ export function AdminDashboard() {
     setMessage("ກຳລັງໂຫຼດຂໍ້ມູນ...");
 
     try {
-      const [dashboardRes, driversRes, bookingsRes, paymentsRes, toursRes, pricingRes] = await Promise.all([
+      const [dashboardRes, usersRes, driversRes, bookingsRes, paymentsRes, toursRes, vehicleCategoriesRes, pricingRes] = await Promise.all([
         fetch(`${apiUrl}/admin/dashboard`, { cache: "no-store", headers: authHeaders() }),
+        fetch(`${apiUrl}/admin/users`, { cache: "no-store", headers: authHeaders() }),
         fetch(`${apiUrl}/admin/drivers`, { cache: "no-store", headers: authHeaders() }),
         fetch(`${apiUrl}/admin/bookings`, { cache: "no-store", headers: authHeaders() }),
         fetch(`${apiUrl}/admin/payments`, { cache: "no-store", headers: authHeaders() }),
         fetch(`${apiUrl}/admin/tours`, { cache: "no-store", headers: authHeaders() }),
+        fetch(`${apiUrl}/admin/vehicle-categories`, { cache: "no-store", headers: authHeaders() }),
         fetch(`${apiUrl}/admin/pricing`, { cache: "no-store", headers: authHeaders() })
       ]);
 
       const dashboardData = await readJson<Dashboard | null>(dashboardRes, null, "dashboard");
+      const usersData = await readJson<unknown>(usersRes, [], "users");
       const driversData = await readJson<unknown>(driversRes, [], "drivers");
       const bookingsData = await readJson<unknown>(bookingsRes, [], "bookings");
       const paymentsData = await readJson<unknown>(paymentsRes, [], "payments");
       const toursData = await readJson<unknown>(toursRes, [], "tours");
+      const vehicleCategoriesData = await readJson<unknown>(vehicleCategoriesRes, [], "vehicle categories");
       const pricingData = await readJson<Pricing>(pricingRes, {
         ratePerKmLak: 15000, minimumFareLak: 50000, meterBaseFareLak: 50000,
         meterIncludedKm: 2, meterRatePerKmLak: 15000, meterRatePerMinuteLak: 1000,
@@ -308,10 +392,12 @@ export function AdminDashboard() {
       }, "pricing");
 
       setDashboard(dashboardData);
+      setUsers(Array.isArray(usersData) ? usersData : []);
       setDrivers(Array.isArray(driversData) ? driversData : []);
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       setTours(Array.isArray(toursData) ? toursData : []);
+      setVehicleCategories(Array.isArray(vehicleCategoriesData) ? vehicleCategoriesData : []);
       setPricing(pricingData);
       setPricingForm({
         ratePerKmLak: String(pricingData.ratePerKmLak ?? 15000),
@@ -327,10 +413,12 @@ export function AdminDashboard() {
       setMessage("ໂຫຼດຂໍ້ມູນສຳເລັດ");
     } catch (error) {
       setDashboard(null);
+      setUsers([]);
       setDrivers([]);
       setBookings([]);
       setPayments([]);
       setTours([]);
+      setVehicleCategories([]);
       if (error instanceof Error && error.message === "AUTH_EXPIRED") {
         setMessage("Session ໝົດອາຍຸ ກະລຸນາເຂົ້າລະບົບໃໝ່");
       } else {
@@ -362,10 +450,12 @@ export function AdminDashboard() {
   function logout() {
     localStorage.removeItem("taxilao_admin_token");
     setToken("");
+    setUsers([]);
     setDrivers([]);
     setBookings([]);
     setPayments([]);
     setTours([]);
+    setVehicleCategories([]);
     setDashboard(null);
     setPricing({
       ratePerKmLak: 15000, minimumFareLak: 50000, meterBaseFareLak: 50000,
@@ -374,6 +464,20 @@ export function AdminDashboard() {
     });
   }
 
+  async function updateUserStatus(userId: string, status: "ACTIVE" | "SUSPENDED") {
+    try {
+      const response = await fetch(`${apiUrl}/admin/users/${userId}/status`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ status })
+      });
+      await readJson(response, null, "user status update");
+      await loadData();
+      setMessage(status === "ACTIVE" ? "ເປີດບັນຊີສະມາຊິກສຳເລັດ" : "ປິດບັນຊີສະມາຊິກສຳເລັດ");
+    } catch (error) {
+      setMessage(error instanceof Error ? `ອັບເດດບັນຊີບໍ່ສຳເລັດ: ${error.message}` : "ອັບເດດບັນຊີບໍ່ສຳເລັດ");
+    }
+  }
   function resetDriverForm() {
     setEditingId(null);
     setDriverForm({
@@ -489,35 +593,156 @@ export function AdminDashboard() {
     }
   }
 
-  async function adjustDriverWallet(driver: Driver, direction: "CREDIT" | "DEBIT") {
-    const actionLabel = direction === "CREDIT" ? "ເຕີມເງິນ" : "ຫັກເງິນ";
-    const amountText = window.prompt(`${actionLabel}ໃຫ້ ${driver.name} (LAK)`);
-    if (!amountText) return;
-    const amountLak = Number(amountText.replace(/[,\s]/g, ""));
-    if (!Number.isFinite(amountLak) || amountLak <= 0) {
-      setMessage("ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ");
+
+  async function loadDriverLedger(driverId: string) {
+    if (!driverId) return;
+    setWalletLoading(true);
+    try {
+      const response = await fetch(`${apiUrl}/admin/drivers/${driverId}/wallet`, { cache: "no-store", headers: authHeaders() });
+      const data = await readJson<{ ledger?: DriverLedgerEntry[] }>(response, { ledger: [] }, "driver wallet");
+      setDriverLedger(Array.isArray(data.ledger) ? data.ledger : []);
+    } catch (error) {
+      setDriverLedger([]);
+      setMessage(error instanceof Error ? `ໂຫຼດບັນຊີ wallet ບໍ່ສຳເລັດ: ${error.message}` : "ໂຫຼດບັນຊີ wallet ບໍ່ສຳເລັດ");
+    } finally {
+      setWalletLoading(false);
+    }
+  }
+
+  function openDriverFinance(driver: Driver, direction: "CREDIT" | "DEBIT" = "CREDIT") {
+    setFinanceDriverId(driver.id);
+    setWalletDirection(direction);
+    setWalletAmountLak("");
+    setWalletNote("");
+    setActiveSection("finance");
+    void loadDriverLedger(driver.id);
+  }
+
+  async function submitWalletAdjustment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const driver = financeDriver;
+    if (!driver) {
+      setMessage("ກະລຸນາເລືອກຄົນຂັບກ່ອນ");
       return;
     }
-    const note = window.prompt("ໃສ່ເຫດຜົນ / note ເພື່ອ audit");
-    if (!note || note.trim().length < 3) {
-      setMessage("ຕ້ອງໃສ່ note ຢ່າງໜ້ອຍ 3 ຕົວອັກສອນ");
+    const amountLak = Number(walletAmountLak.replace(/[,\s]/g, ""));
+    if (!Number.isFinite(amountLak) || amountLak <= 0) {
+      setMessage("ຈຳນວນເງິນ wallet ບໍ່ຖືກຕ້ອງ");
+      return;
+    }
+    if (!walletNote.trim() || walletNote.trim().length < 3) {
+      setMessage("ກະລຸນາໃສ່ note ສຳລັບ audit ຢ່າງໜ້ອຍ 3 ຕົວອັກສອນ");
       return;
     }
 
+    setWalletLoading(true);
     try {
       const response = await fetch(`${apiUrl}/admin/drivers/${driver.id}/wallet`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ direction, amountLak, note: note.trim() })
+        body: JSON.stringify({ direction: walletDirection, amountLak, note: walletNote.trim() })
       });
       await readJson(response, null, "adjust driver wallet");
-      await loadData();
-      setMessage(`${actionLabel}ສຳເລັດ: ${driver.name}`);
+      setWalletAmountLak("");
+      setWalletNote("");
+      await Promise.all([loadData(), loadDriverLedger(driver.id)]);
+      setMessage(`${walletDirection === "CREDIT" ? "ເຕີມ" : "ຫັກ"} wallet ສຳເລັດ: ${driver.name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? `${actionLabel}ບໍ່ສຳເລັດ: ${error.message}` : `${actionLabel}ບໍ່ສຳເລັດ`);
+      setMessage(error instanceof Error ? `ປັບ wallet ບໍ່ສຳເລັດ: ${error.message}` : "ປັບ wallet ບໍ່ສຳເລັດ");
+    } finally {
+      setWalletLoading(false);
+    }
+  }
+  async function adjustDriverWallet(driver: Driver, direction: "CREDIT" | "DEBIT") {
+    openDriverFinance(driver, direction);
+  }
+
+  function resetVehicleForm() {
+    setEditingVehicleId(null);
+    setVehicleForm({
+      code: "",
+      name: "",
+      nameLo: "",
+      description: "",
+      capacity: "4",
+      ratePerKmLak: "15000",
+      minimumFareLak: "50000",
+      sortOrder: "0",
+      active: true,
+      visibleOnWeb: true,
+      default: false
+    });
+  }
+
+  function startCreateVehicleCategory() {
+    resetVehicleForm();
+    setActiveSection("vehicles");
+    setShowVehicleForm(true);
+    window.setTimeout(() => vehicleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function editVehicleCategory(category: VehicleCategory) {
+    setEditingVehicleId(category.id);
+    setActiveSection("vehicles");
+    setShowVehicleForm(true);
+    setVehicleForm({
+      code: category.code || "",
+      name: category.name || "",
+      nameLo: category.nameLo || category.name || "",
+      description: category.description || "",
+      capacity: String(category.capacity ?? 1),
+      ratePerKmLak: String(category.ratePerKmLak ?? 15000),
+      minimumFareLak: String(category.minimumFareLak ?? 50000),
+      sortOrder: String(category.sortOrder ?? 0),
+      active: category.active !== false,
+      visibleOnWeb: category.visibleOnWeb !== false,
+      default: Boolean(category.default)
+    });
+    window.setTimeout(() => vehicleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  async function saveVehicleCategory(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = {
+      code: vehicleForm.code,
+      name: vehicleForm.name,
+      nameLo: vehicleForm.nameLo,
+      description: vehicleForm.description,
+      capacity: Number(vehicleForm.capacity || 1),
+      ratePerKmLak: Number(vehicleForm.ratePerKmLak || 15000),
+      minimumFareLak: Number(vehicleForm.minimumFareLak || 50000),
+      sortOrder: Number(vehicleForm.sortOrder || 0),
+      active: vehicleForm.active,
+      visibleOnWeb: vehicleForm.visibleOnWeb,
+      default: vehicleForm.default
+    };
+
+    try {
+      const response = await fetch(editingVehicleId ? `${apiUrl}/admin/vehicle-categories/${editingVehicleId}` : `${apiUrl}/admin/vehicle-categories`, {
+        method: editingVehicleId ? "PATCH" : "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(body)
+      });
+      await readJson(response, null, "save vehicle category");
+      resetVehicleForm();
+      setShowVehicleForm(false);
+      await loadData();
+      setMessage("ບັນທຶກຫມວດລົດສຳເລັດ");
+    } catch (error) {
+      setMessage(error instanceof Error ? `ບັນທຶກຫມວດລົດບໍ່ສຳເລັດ: ${error.message}` : "ບັນທຶກຫມວດລົດບໍ່ສຳເລັດ");
     }
   }
 
+  async function disableVehicleCategory(id: string) {
+    try {
+      const response = await fetch(`${apiUrl}/admin/vehicle-categories/${id}`, { method: "DELETE", headers: authHeaders() });
+      await readJson(response, null, "disable vehicle category");
+      await loadData();
+      setMessage("ປິດຫມວດລົດສຳເລັດ");
+    } catch (error) {
+      setMessage(error instanceof Error ? `ປິດຫມວດລົດບໍ່ສຳເລັດ: ${error.message}` : "ປິດຫມວດລົດບໍ່ສຳເລັດ");
+    }
+  }
   function resetTourForm() {
     setEditingTourId(null);
     setTourForm({
@@ -740,6 +965,11 @@ export function AdminDashboard() {
   useEffect(() => {
     loadData();
   }, [token]);
+  useEffect(() => {
+    if (token && activeSection === "finance" && financeDriver?.id) {
+      void loadDriverLedger(financeDriver.id);
+    }
+  }, [token, activeSection, financeDriver?.id]);
 
   if (!token) {
     return (
@@ -804,6 +1034,158 @@ export function AdminDashboard() {
         </>
         ) : null}
 
+
+        {activeSection === "vehicles" ? (
+        <>
+        <h2 id="vehicles">ຈັດການຫມວດລົດ</h2>
+        <div className="admin-actionbar">
+          <div>
+            <strong>Vehicle Categories</strong>
+            <p>ກຳນົດປະເພດລົດ, ລາຄາຕໍ່ km, ລາຄາຂັ້ນຕ່ຳ ແລະການສະແດງຝັ່ງລູກຄ້າ.</p>
+          </div>
+          <div className="table-actions">
+            <button className="btn btn-primary" onClick={startCreateVehicleCategory} type="button"><Plus size={16} /> ເພີ່ມຫມວດລົດ</button>
+          </div>
+        </div>
+
+        {showVehicleForm ? (
+          <form className="admin-form compact-form" onSubmit={saveVehicleCategory} ref={vehicleFormRef}>
+            <h3>{editingVehicleId ? "ແກ້ໄຂຫມວດລົດ" : "ເພີ່ມຫມວດລົດ"}</h3>
+            <div className="form-grid two-col">
+              <label>Code<input value={vehicleForm.code} onChange={(event) => setVehicleForm({ ...vehicleForm, code: event.target.value })} placeholder="suv" required /></label>
+              <label>ຊື່ສາກົນ<input value={vehicleForm.name} onChange={(event) => setVehicleForm({ ...vehicleForm, name: event.target.value })} placeholder="SUV" required /></label>
+              <label>ຊື່ພາສາລາວ<input value={vehicleForm.nameLo} onChange={(event) => setVehicleForm({ ...vehicleForm, nameLo: event.target.value })} placeholder="ລົດ SUV" required /></label>
+              <label>ຈຳນວນບ່ອນນັ່ງ<input type="number" min="1" value={vehicleForm.capacity} onChange={(event) => setVehicleForm({ ...vehicleForm, capacity: event.target.value })} required /></label>
+              <label>ລາຄາຕໍ່ km (LAK)<input type="number" min="1" value={vehicleForm.ratePerKmLak} onChange={(event) => setVehicleForm({ ...vehicleForm, ratePerKmLak: event.target.value })} required /></label>
+              <label>ລາຄາຂັ້ນຕ່ຳ (LAK)<input type="number" min="1" value={vehicleForm.minimumFareLak} onChange={(event) => setVehicleForm({ ...vehicleForm, minimumFareLak: event.target.value })} required /></label>
+              <label>ລຳດັບສະແດງ<input type="number" value={vehicleForm.sortOrder} onChange={(event) => setVehicleForm({ ...vehicleForm, sortOrder: event.target.value })} /></label>
+              <label>ຄຳອະທິບາຍ<textarea value={vehicleForm.description} onChange={(event) => setVehicleForm({ ...vehicleForm, description: event.target.value })} /></label>
+            </div>
+            <div className="check-row">
+              <label><input type="checkbox" checked={vehicleForm.active} onChange={(event) => setVehicleForm({ ...vehicleForm, active: event.target.checked })} /> ເປີດໃຊ້ງານ</label>
+              <label><input type="checkbox" checked={vehicleForm.visibleOnWeb} onChange={(event) => setVehicleForm({ ...vehicleForm, visibleOnWeb: event.target.checked })} /> ສະແດງຝັ່ງລູກຄ້າ</label>
+              <label><input type="checkbox" checked={vehicleForm.default} onChange={(event) => setVehicleForm({ ...vehicleForm, default: event.target.checked })} /> ຕັ້ງເປັນ default</label>
+            </div>
+            <div className="table-actions">
+              <button className="btn btn-primary" type="submit"><Save size={16} /> ບັນທຶກ</button>
+              <button className="btn" onClick={resetVehicleForm} type="button"><Plus size={16} /> ຟອມໃໝ່</button>
+              <button className="btn" onClick={() => { resetVehicleForm(); setShowVehicleForm(false); }} type="button"><X size={16} /> ປິດ</button>
+            </div>
+          </form>
+        ) : null}
+
+        <div className="table-wrap">
+          <table className="table compact-table">
+            <thead>
+              <tr>
+                <th>ຫມວດລົດ</th>
+                <th>ລາຄາ</th>
+                <th>ບ່ອນນັ່ງ</th>
+                <th>ສະຖານະ</th>
+                <th>ຈັດການ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vehicleCategories.map((category) => (
+                <tr key={category.id}>
+                  <td>
+                    <div className="driver-cell">
+                      <span className="driver-avatar placeholder"><Car size={18} /></span>
+                      <div>
+                        <strong>{category.nameLo || category.name}</strong>
+                        <span>{category.code} · {category.name}</span>
+                        {category.description ? <span className="muted-block">{category.description}</span> : null}
+                      </div>
+                    </div>
+                  </td>
+                  <td><strong>{formatLak(category.minimumFareLak)}</strong><span className="muted-block">{formatLak(category.ratePerKmLak)} / km</span></td>
+                  <td>{category.capacity}</td>
+                  <td>
+                    <span className={category.active !== false && category.visibleOnWeb !== false ? "status-pill approved" : "status-pill muted"}>{category.active !== false && category.visibleOnWeb !== false ? "ເປີດສະແດງ" : "ປິດ"}</span>
+                    {category.default ? <span className="status-pill premium">Default</span> : null}
+                  </td>
+                  <td>
+                    <div className="table-actions mini-actions">
+                      <button className="btn" onClick={() => editVehicleCategory(category)} type="button"><Edit size={14} /> ແກ້ໄຂ</button>
+                      <button className="btn danger" onClick={() => disableVehicleCategory(category.id)} type="button"><Ban size={14} /> ປິດ</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
+        ) : null}
+        {activeSection === "users" ? (
+        <>
+        <h2 id="users">ຈັດການສະມາຊິກ</h2>
+        <div className="admin-actionbar">
+          <div>
+            <strong>Member Accounts</strong>
+            <p>ກວດສອບບັນຊີລູກຄ້າ, ສະຖານະ, ອໍເດີ້, ຄະແນນ ແລະຍອດໃຊ້ຈ່າຍ.</p>
+          </div>
+          <div className="table-actions">
+            <span className="admin-kpi-chip"><UsersRound size={15} /> {users.length} ບັນຊີ</span>
+            <span className="admin-kpi-chip danger-soft"><ShieldAlert size={15} /> {suspendedUsers.length} ຖືກປິດ</span>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="table compact-table admin-users-table">
+            <thead>
+              <tr>
+                <th>ສະມາຊິກ</th>
+                <th>ສະຖິຕິການໃຊ້ງານ</th>
+                <th>ຄະແນນ</th>
+                <th>ສະຖານະ</th>
+                <th>ເຂົ້າລະບົບຫຼ້າສຸດ</th>
+                <th>ຈັດການ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td>
+                    <div className="driver-cell">
+                      {user.avatarUrl ? <img className="driver-avatar" src={user.avatarUrl} alt={user.name || user.email} /> : <span className="driver-avatar placeholder"><UserRound size={18} /></span>}
+                      <div>
+                        <strong>{user.name || "ບໍ່ມີຊື່"}</strong>
+                        <span>{user.email}</span>
+                        <span className="muted-block">ID: {user.id}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <strong>{user.bookingCount ?? 0} ອໍເດີ້</strong>
+                    <span className="muted-block">ກຳລັງໃຊ້ງານ {user.activeBookings ?? 0} · ສຳເລັດ {user.completedTrips ?? user.completedBookings ?? 0}</span>
+                    <span className="muted-block">ຍອດໃຊ້ຈ່າຍ {formatLak(user.totalSpentLak ?? 0)}</span>
+                  </td>
+                  <td>
+                    <strong>{Number(user.customerRating ?? 5).toFixed(1)} / 5</strong>
+                    <span className="muted-block">{user.customerReviewCount ?? 0} ຣີວິວ</span>
+                  </td>
+                  <td>
+                    <span className={user.status === "SUSPENDED" ? "status-pill muted" : "status-pill approved"}>{user.status === "SUSPENDED" ? "ປິດບັນຊີ" : "ເປີດໃຊ້ງານ"}</span>
+                    <span className="muted-block">{user.provider === "google" ? "Google" : user.provider || "Member"}</span>
+                  </td>
+                  <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("lo-LA") : "ຍັງບໍ່ມີ"}</td>
+                  <td>
+                    <div className="table-actions mini-actions">
+                      {user.status === "SUSPENDED" ? (
+                        <button className="btn" onClick={() => updateUserStatus(user.id, "ACTIVE")} type="button"><BadgeCheck size={14} /> ເປີດ</button>
+                      ) : (
+                        <button className="btn danger" onClick={() => updateUserStatus(user.id, "SUSPENDED")} type="button"><Ban size={14} /> ປິດ</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        </>
+        ) : null}
         {activeSection === "drivers" ? (
         <>
         <h2 id="drivers">ຈັດການຄົນຂັບ</h2>
@@ -1134,6 +1516,86 @@ export function AdminDashboard() {
         </>
         ) : null}
 
+        {activeSection === "finance" ? (
+        <>
+        <h2 id="finance">ສູນການເງິນຄົນຂັບ</h2>
+        <div className="stat-grid finance-stat-grid">
+          <Stat label="Wallet ຄົນຂັບລວມ" value={formatLak(totalDriverWalletLak)} icon={<Banknote />} />
+          <Stat label="ເງິນໃກ້ໝົດ" value={`${lowBalanceDrivers.length} ຄົນ`} icon={<ShieldAlert />} />
+          <Stat label="ເຕີມເງິນ 50 ລາຍການຫຼ້າສຸດ" value={formatLak(ledgerCreditLak)} icon={<Plus />} />
+          <Stat label="ຫັກ/Commission 50 ລາຍການຫຼ້າສຸດ" value={formatLak(ledgerDebitLak)} icon={<Banknote />} />
+        </div>
+
+        <div className="admin-actionbar finance-panel">
+          <div>
+            <strong>Wallet Control</strong>
+            <p>ເຕີມ ຫຼື ຫັກ wallet ຂອງຄົນຂັບດ້ວຍ audit note. ລະບົບບໍ່ອະນຸຍາດໃຫ້ຫັກຈົນຍອດຕິດລົບ.</p>
+          </div>
+          <span className="admin-kpi-chip">Commission {pricing.driverCommissionPercent}%</span>
+        </div>
+
+        <form className="admin-form compact-form finance-form" onSubmit={submitWalletAdjustment}>
+          <div className="form-grid two-col">
+            <label>ຄົນຂັບ
+              <select value={financeDriver?.id || ""} onChange={(event) => { setFinanceDriverId(event.target.value); void loadDriverLedger(event.target.value); }}>
+                {drivers.map((driver) => (
+                  <option key={driver.id} value={driver.id}>{driver.name} · {formatLak(driver.walletBalanceLak ?? 0)}</option>
+                ))}
+              </select>
+            </label>
+            <label>ປະເພດການເງິນ
+              <select value={walletDirection} onChange={(event) => setWalletDirection(event.target.value as "CREDIT" | "DEBIT")}>
+                <option value="CREDIT">ເຕີມເງິນ</option>
+                <option value="DEBIT">ຫັກເງິນ</option>
+              </select>
+            </label>
+            <label>ຈຳນວນ LAK<input type="number" min="1" required value={walletAmountLak} onChange={(event) => setWalletAmountLak(event.target.value)} placeholder="50000" /></label>
+            <label>Audit note<input required minLength={3} value={walletNote} onChange={(event) => setWalletNote(event.target.value)} placeholder="ເຫດຜົນການເຕີມ/ຫັກເງິນ" /></label>
+          </div>
+          {financeDriver ? (
+            <div className="finance-driver-summary">
+              <span><strong>{financeDriver.name}</strong></span>
+              <span>Wallet: <strong className={financeDriver.walletLowBalance ? "danger-text" : ""}>{formatLak(financeDriver.walletBalanceLak ?? 0)}</strong></span>
+              <span>ເຕືອນເງິນໃກ້ໝົດ: {formatLak(financeDriver.walletLowBalanceWarningLak ?? pricing.driverLowBalanceWarningLak)}</span>
+            </div>
+          ) : null}
+          <div className="table-actions">
+            <button className="btn btn-primary" disabled={walletLoading || !financeDriver} type="submit"><Save size={16} /> {walletLoading ? "ກຳລັງບັນທຶກ" : "ບັນທຶກ Wallet"}</button>
+            {financeDriver ? <button className="btn" onClick={() => loadDriverLedger(financeDriver.id)} type="button"><RefreshCcw size={16} /> ໂຫຼດ Ledger</button> : null}
+          </div>
+        </form>
+
+        <div className="table-wrap">
+          <table className="table compact-table finance-ledger-table">
+            <thead>
+              <tr>
+                <th>ວັນເວລາ</th>
+                <th>ປະເພດ</th>
+                <th>ອໍເດີ້</th>
+                <th>ຈຳນວນ</th>
+                <th>ຍອດຫຼັງລາຍການ</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {driverLedger.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.createdAt ? new Date(entry.createdAt).toLocaleString("lo-LA") : "-"}</td>
+                  <td><span className={entry.signedAmountLak < 0 ? "status-pill muted" : "status-pill approved"}>{entry.type}</span></td>
+                  <td>{entry.bookingId ? entry.bookingId.slice(0, 8) : "-"}</td>
+                  <td><strong className={entry.signedAmountLak < 0 ? "danger-text" : ""}>{entry.signedAmountLak < 0 ? "-" : "+"}{formatLak(entry.amountLak)}</strong></td>
+                  <td>{formatLak(entry.balanceAfterLak)}</td>
+                  <td>{entry.note || "-"}</td>
+                </tr>
+              ))}
+              {!driverLedger.length ? (
+                <tr><td colSpan={6}>ຍັງບໍ່ມີລາຍການ ledger ສຳລັບຄົນຂັບນີ້</td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        </>
+        ) : null}
         {activeSection === "payments" ? (
         <>
         <h2 id="payments">ຈັດການການຊຳລະເງິນ</h2>
