@@ -774,6 +774,82 @@ function saveImageFields(req, fields, folder) {
   return saved;
 }
 
+function saveChatAttachmentDataUrl(value, req) {
+  if (!value || typeof value !== "string") return null;
+  const match = value.match(/^data:(image\/(?:png|jpe?g|webp)|audio\/(?:mpeg|mp3|mp4|wav|webm|ogg));base64,(.+)$/);
+  if (!match) {
+    const error = new Error("Only PNG, JPG, WEBP, MP3, MP4, WAV, WEBM, and OGG chat uploads are supported");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const mimeType = match[1].replace("audio/mp3", "audio/mpeg");
+  const buffer = Buffer.from(match[2], "base64");
+  const isImage = mimeType.startsWith("image/");
+  const maxSize = isImage ? 5 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (buffer.length > maxSize) {
+    const error = new Error(isImage ? "Chat image is too large. Maximum size is 5MB" : "Chat audio is too large. Maximum size is 8MB");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const extensionByMime = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "audio/ogg": "ogg"
+  };
+  const extension = extensionByMime[mimeType] || "bin";
+  const folderPath = path.join(uploadDir, "chat");
+  fs.mkdirSync(folderPath, { recursive: true });
+  const filename = `${Date.now()}-${randomUUID()}.${extension}`;
+  fs.writeFileSync(path.join(folderPath, filename), buffer);
+
+  return {
+    url: `${req.protocol}://${req.get("host")}/uploads/chat/${filename}`,
+    mimeType,
+    size: buffer.length,
+    type: isImage ? "IMAGE" : "AUDIO"
+  };
+}
+
+async function getAuthorizedChatBooking(req, bookingId, { requireActive = false } = {}) {
+  const booking = await db.collection("bookings").findOne({ id: bookingId });
+  if (!booking) return null;
+  const isOwner = req.user?.role === "USER" && booking.userId === req.user.id;
+  const isDriver = req.user?.role === "DRIVER" && booking.driverId === req.user.driverId;
+  if (!isOwner && !isDriver) {
+    const error = new Error("You do not have access to this booking chat");
+    error.statusCode = 403;
+    throw error;
+  }
+  if (requireActive && !["CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"].includes(booking.status)) {
+    const error = new Error("Chat opens after the driver accepts the booking");
+    error.statusCode = 409;
+    throw error;
+  }
+  return booking;
+}
+
+function publicChatMessage(message) {
+  return {
+    id: message.id,
+    bookingId: message.bookingId,
+    senderRole: message.senderRole,
+    senderName: message.senderName,
+    text: message.text || "",
+    attachmentUrl: message.attachmentUrl || "",
+    attachmentType: message.attachmentType || "",
+    attachmentMimeType: message.attachmentMimeType || "",
+    createdAt: message.createdAt
+  };
+}
+
 async function seedIfEmpty() {
   await db.collection("drivers").createIndex({ id: 1 }, { unique: true });
   await db.collection("drivers").createIndex({ username: 1 }, { unique: true, sparse: true });
@@ -782,6 +858,8 @@ async function seedIfEmpty() {
   await db.collection("payments").createIndex({ id: 1 }, { unique: true });
   await db.collection("users").createIndex({ email: 1 }, { unique: true });
   await db.collection("settings").createIndex({ id: 1 }, { unique: true });
+  await db.collection("chatMessages").createIndex({ id: 1 }, { unique: true });
+  await db.collection("chatMessages").createIndex({ bookingId: 1, createdAt: 1 });
   await db.collection("driverLedger").createIndex({ id: 1 }, { unique: true });
   await db.collection("driverLedger").createIndex({ driverId: 1, createdAt: -1 });
   await db.collection("driverLedger").createIndex(
@@ -1330,6 +1408,11 @@ const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
 const bookingLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30 });
 const lookupLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 40 });
 const mapsLimiter = rateLimit({ windowMs: 60 * 1000, limit: 60 });
+const driverReadLimiter = rateLimit({ windowMs: 60 * 1000, limit: 120 });
+const driverWriteLimiter = rateLimit({ windowMs: 60 * 1000, limit: 90 });
+const driverLocationLimiter = rateLimit({ windowMs: 60 * 1000, limit: 60 });
+const chatReadLimiter = rateLimit({ windowMs: 60 * 1000, limit: 120 });
+const chatWriteLimiter = rateLimit({ windowMs: 60 * 1000, limit: 40 });
 const bookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const paymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED"];
 const paymentMethods = ["CASH", "BANK_QR", "CARD", "USDT_TRC20", "USDT_BEP20"];
@@ -1943,7 +2026,7 @@ app.get("/bookings/:id/events", authenticate, async (req, res, next) => {
   }
 });
 
-app.patch("/driver/availability", requireDriver, async (req, res, next) => {
+app.patch("/driver/availability", driverWriteLimiter, requireDriver, async (req, res, next) => {
   try {
     await expireDispatchOffers();
     const online = req.body.online === true;
@@ -1995,7 +2078,7 @@ app.patch("/driver/availability", requireDriver, async (req, res, next) => {
   }
 });
 
-app.patch("/driver/location", requireDriver, async (req, res, next) => {
+app.patch("/driver/location", driverLocationLimiter, requireDriver, async (req, res, next) => {
   try {
     const coordinates = parseCoordinates(req.body);
     if (!coordinates) {
@@ -2028,7 +2111,7 @@ app.patch("/driver/location", requireDriver, async (req, res, next) => {
   }
 });
 
-app.get("/driver/bookings", requireDriver, async (req, res, next) => {
+app.get("/driver/bookings", driverReadLimiter, requireDriver, async (req, res, next) => {
   try {
     await expireDispatchOffers();
     const bookings = await db.collection("bookings").aggregate([
@@ -2061,7 +2144,7 @@ app.get("/driver/bookings", requireDriver, async (req, res, next) => {
   }
 });
 
-app.patch("/driver/bookings/:id/status", requireDriver, async (req, res, next) => {
+app.patch("/driver/bookings/:id/status", driverWriteLimiter, requireDriver, async (req, res, next) => {
   try {
     await expireDispatchOffers();
     const status = req.body.status;
@@ -2151,7 +2234,7 @@ app.patch("/driver/bookings/:id/status", requireDriver, async (req, res, next) =
   }
 });
 
-app.patch("/driver/bookings/:id/location", requireDriver, async (req, res, next) => {
+app.patch("/driver/bookings/:id/location", driverLocationLimiter, requireDriver, async (req, res, next) => {
   try {
     const longitude = Number(req.body.longitude);
     const latitude = Number(req.body.latitude);
@@ -2210,14 +2293,63 @@ app.patch("/bookings/:id/status", authenticate, async (req, res, next) => {
       return res.status(403).json({ message: "Customers can only cancel their own booking" });
     }
 
-    await db.collection("bookings").updateOne(
-      { id: req.params.id, userId: req.user.id, status: { $in: ["PENDING", "OFFERED", "CONFIRMED"] } },
+    const result = await db.collection("bookings").updateOne(
+      { id: req.params.id, userId: req.user.id, status: { $in: ["PENDING", "OFFERED"] } },
       { $set: { status, cancelledAt: new Date(), updatedAt: new Date() } }
     );
     const booking = await db.collection("bookings").findOne({ id: req.params.id, userId: req.user.id });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (result.modifiedCount === 0) {
+      return res.status(409).json({ message: "This booking already has a driver and cannot be cancelled by customer" });
+    }
     await emitBookingUpdate(booking.id);
     res.json(booking);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/bookings/:id/chat", chatReadLimiter, authenticate, async (req, res, next) => {
+  try {
+    await getAuthorizedChatBooking(req, req.params.id);
+    const messages = await db.collection("chatMessages")
+      .find({ bookingId: req.params.id })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .toArray();
+    res.json(messages.map(publicChatMessage));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, async (req, res, next) => {
+  try {
+    const booking = await getAuthorizedChatBooking(req, req.params.id, { requireActive: true });
+    const text = String(req.body.text || "").trim().slice(0, 1200);
+    const attachment = saveChatAttachmentDataUrl(req.body.attachmentDataUrl, req);
+    if (!text && !attachment) return res.status(400).json({ message: "Message text or attachment is required" });
+
+    const senderName = req.user.role === "DRIVER"
+      ? (await db.collection("drivers").findOne({ id: req.user.driverId }))?.name || "Driver"
+      : (await db.collection("users").findOne({ id: req.user.id }))?.name || "Customer";
+
+    const message = {
+      id: randomUUID(),
+      bookingId: booking.id,
+      senderRole: req.user.role,
+      senderId: req.user.role === "DRIVER" ? req.user.driverId : req.user.id,
+      senderName,
+      text,
+      attachmentUrl: attachment?.url || "",
+      attachmentType: attachment?.type || "",
+      attachmentMimeType: attachment?.mimeType || "",
+      attachmentSize: attachment?.size || 0,
+      createdAt: new Date()
+    };
+    await db.collection("chatMessages").insertOne(message);
+    await emitBookingUpdate(booking.id);
+    res.status(201).json(publicChatMessage(message));
   } catch (error) {
     next(error);
   }

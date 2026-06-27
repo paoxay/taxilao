@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { CarFront, Check, CircleDot, Clock3, MapPin, Navigation, Route, ShieldCheck, X } from "lucide-react";
+import { CarFront, Check, CircleDot, Clock3, MapPin, Navigation, Route, Send, ShieldCheck, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { useUiCopy } from "./use-ui-copy";
 
@@ -43,6 +43,17 @@ export type LiveBooking = {
   } | null;
 };
 
+type ChatMessage = {
+  id: string;
+  bookingId: string;
+  senderRole: "USER" | "DRIVER" | string;
+  senderName: string;
+  text: string;
+  attachmentUrl?: string;
+  attachmentType?: string;
+  createdAt?: string;
+};
+
 const statusOrder = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS", "COMPLETED"];
 
 export function RideLiveTracker({
@@ -60,8 +71,27 @@ export function RideLiveTracker({
   const [booking, setBooking] = useState(initialBooking);
   const [connected, setConnected] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatStatus, setChatStatus] = useState<"idle" | "loading" | "sending" | "error">("idle");
+  const [chatError, setChatError] = useState("");
+  const [cancelStatus, setCancelStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [cancelError, setCancelError] = useState("");
 
   useEffect(() => setMounted(true), []);
+  const terminalStatus = booking.status === "COMPLETED" || booking.status === "CANCELLED";
+  const canCancel = booking.status === "PENDING" || booking.status === "OFFERED";
+  const chatEnabled = ["CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"].includes(booking.status) && Boolean(booking.driver?.id);
+
+  useEffect(() => {
+    if (terminalStatus) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [terminalStatus]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,6 +136,80 @@ export function RideLiveTracker({
     return () => controller.abort();
   }, [apiUrl, initialBooking.id, token]);
 
+  async function loadChat(silent = false) {
+    if (!chatEnabled) return;
+    if (!silent) setChatStatus("loading");
+    try {
+      const response = await fetch(`${apiUrl}/bookings/${booking.id}/chat`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store"
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Chat failed");
+      setChatMessages(Array.isArray(data) ? data : []);
+      setChatStatus("idle");
+      setChatError("");
+    } catch (error) {
+      setChatStatus("error");
+      setChatError(error instanceof Error ? error.message : "Chat failed");
+    }
+  }
+
+  useEffect(() => {
+    if (!chatEnabled) {
+      setChatMessages([]);
+      return;
+    }
+    loadChat();
+    const interval = window.setInterval(() => loadChat(true), 5000);
+    return () => window.clearInterval(interval);
+  }, [chatEnabled, booking.id, apiUrl, token]);
+
+  async function sendChatMessage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = chatText.trim();
+    if (!text || chatStatus === "sending") return;
+    setChatStatus("sending");
+    try {
+      const response = await fetch(`${apiUrl}/bookings/${booking.id}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Send failed");
+      setChatMessages((items) => [...items, data]);
+      setChatText("");
+      setChatStatus("idle");
+      setChatError("");
+    } catch (error) {
+      setChatStatus("error");
+      setChatError(error instanceof Error ? error.message : "Send failed");
+    }
+  }
+
+  async function cancelRide() {
+    if (!canCancel || cancelStatus === "loading") return;
+    const confirmed = window.confirm(copy.cancelRideConfirm);
+    if (!confirmed) return;
+    setCancelStatus("loading");
+    try {
+      const response = await fetch(`${apiUrl}/bookings/${booking.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "CANCELLED" })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Cancel failed");
+      setBooking((current) => ({ ...current, ...data, status: "CANCELLED" }));
+      setCancelStatus("idle");
+      setCancelError("");
+    } catch (error) {
+      setCancelStatus("error");
+      setCancelError(error instanceof Error ? error.message : "Cancel failed");
+    }
+  }
+
   const statusContent = useMemo(() => {
     if (booking.status === "OFFERED") return { title: copy.waitingForDriver, detail: booking.driver?.name || copy.findingDriverHelp };
     if (booking.status === "CONFIRMED") return { title: copy.driverAccepted, detail: copy.waitingForDriver };
@@ -127,7 +231,7 @@ export function RideLiveTracker({
             <span className={`ride-live-signal ${connected ? "online" : ""}`} />
             <small>{connected ? copy.realtimeConnected : copy.realtimeReconnecting}</small>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close"><X size={20} /></button>
+          {terminalStatus ? <button type="button" onClick={onClose} aria-label="Close"><X size={20} /></button> : null}
         </header>
 
         <div className={`ride-search-visual status-${booking.status.toLowerCase()}`}>
@@ -157,6 +261,30 @@ export function RideLiveTracker({
             </div>
             {booking.driver.verified ? <ShieldCheck size={21} aria-label={copy.verified} /> : null}
           </article>
+        ) : null}
+
+        {chatEnabled ? (
+          <section className="ride-chat-card">
+            <div className="ride-chat-head">
+              <strong>{copy.liveChat}</strong>
+              {booking.driver?.name ? <small>{booking.driver.name}</small> : null}
+            </div>
+            <div className="ride-chat-messages">
+              {chatMessages.length ? chatMessages.map((message) => (
+                <div className={`ride-chat-bubble ${message.senderRole === "USER" ? "mine" : ""}`} key={message.id}>
+                  <small>{message.senderName}</small>
+                  <span>{message.text}</span>
+                </div>
+              )) : <p>{copy.noChatMessages}</p>}
+            </div>
+            <form className="ride-chat-form" onSubmit={sendChatMessage}>
+              <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder={copy.typeMessage} />
+              <button disabled={chatStatus === "sending" || !chatText.trim()} type="submit"><Send size={17} /></button>
+            </form>
+            {chatError ? <small className="ride-chat-error">{chatError}</small> : null}
+          </section>
+        ) : booking.driver ? (
+          <div className="ride-chat-locked">{copy.chatAfterAccepted}</div>
         ) : null}
 
         {booking.driver ? (
@@ -202,8 +330,10 @@ export function RideLiveTracker({
 
         <footer className="ride-live-footer">
           <span><small>{copy.rideRequestId}</small><strong>#{booking.id.slice(0, 8).toUpperCase()}</strong></span>
-          <Link className="btn btn-primary" href={`/dashboard?lang=${locale}`}>{copy.viewTripDetails}</Link>
+          {canCancel ? <button className="btn ride-cancel-btn" disabled={cancelStatus === "loading"} onClick={cancelRide} type="button">{cancelStatus === "loading" ? copy.sending : copy.cancelRide}</button> : null}
+          {terminalStatus ? <Link className="btn btn-primary" href={`/dashboard?lang=${locale}`}>{copy.viewTripDetails}</Link> : <span className="ride-live-lock">{copy.stayOnTracker}</span>}
         </footer>
+        {cancelError ? <p className="ride-chat-error">{cancelError}</p> : null}
       </section>
     </div>,
     document.body

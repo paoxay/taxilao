@@ -171,12 +171,19 @@ const en = {
   realtimeReconnecting: "Reconnecting live updates...",
   driverLiveLocation: "Driver live location",
   gpsWaiting: "Waiting for the driver's GPS signal",
-  gpsUpdated: "GPS updated"
-  ,memberOnly: "Members only"
-  ,loginBeforeBooking: "Sign in before calling a taxi"
-  ,loginBeforeBookingHelp: "Create or sign in to your member account to book, track your ride, and keep your trip history."
-  ,checkingAccount: "Checking your account..."
-  ,accountBookingSafety: "Your booking will be linked securely to your member account"
+  gpsUpdated: "GPS updated",
+  memberOnly: "Members only",
+  loginBeforeBooking: "Sign in before calling a taxi",
+  loginBeforeBookingHelp: "Create or sign in to your member account to book, track your ride, and keep your trip history.",
+  checkingAccount: "Checking your account...",
+  accountBookingSafety: "Your booking will be linked securely to your member account",
+  liveChat: "Live chat",
+  noChatMessages: "No messages yet",
+  typeMessage: "Type a message...",
+  chatAfterAccepted: "Chat opens after a driver accepts your ride.",
+  cancelRide: "Cancel ride",
+  cancelRideConfirm: "Cancel this ride request?",
+  stayOnTracker: "Stay on this screen while TAXILAO finds your driver."
 } as const;
 
 type UiCopy = { [K in keyof typeof en]: string };
@@ -268,12 +275,19 @@ const lo: UiCopy = {
   realtimeReconnecting: "ກຳລັງເຊື່ອມຕໍ່ສະຖານະສົດໃໝ່...",
   driverLiveLocation: "ຕຳແໜ່ງຄົນຂັບແບບລຽວທາມ",
   gpsWaiting: "ກຳລັງລໍສັນຍານ GPS ຈາກຄົນຂັບ",
-  gpsUpdated: "GPS ອັບເດດ"
-  ,memberOnly: "ສຳລັບສະມາຊິກ"
-  ,loginBeforeBooking: "ເຂົ້າລະບົບກ່ອນເອີ້ນລົດ"
-  ,loginBeforeBookingHelp: "ສະໝັກ ຫຼືເຂົ້າບັນຊີສະມາຊິກເພື່ອຈອງ, ຕິດຕາມລົດ ແລະເກັບປະຫວັດການເດີນທາງ."
-  ,checkingAccount: "ກຳລັງກວດສອບບັນຊີ..."
-  ,accountBookingSafety: "ການຈອງຈະຖືກເຊື່ອມກັບບັນຊີສະມາຊິກຂອງທ່ານຢ່າງປອດໄພ"
+  gpsUpdated: "GPS ອັບເດດ",
+  memberOnly: "ສຳລັບສະມາຊິກ",
+  loginBeforeBooking: "ເຂົ້າລະບົບກ່ອນເອີ້ນລົດ",
+  loginBeforeBookingHelp: "ສະໝັກ ຫຼືເຂົ້າບັນຊີສະມາຊິກເພື່ອຈອງ, ຕິດຕາມລົດ ແລະເກັບປະຫວັດການເດີນທາງ.",
+  checkingAccount: "ກຳລັງກວດສອບບັນຊີ...",
+  accountBookingSafety: "ການຈອງຈະຖືກເຊື່ອມກັບບັນຊີສະມາຊິກຂອງທ່ານຢ່າງປອດໄພ",
+  liveChat: "ແຊັດສົດ",
+  noChatMessages: "ຍັງບໍ່ມີຂໍ້ຄວາມ",
+  typeMessage: "ພິມຂໍ້ຄວາມ...",
+  chatAfterAccepted: "ແຊັດຈະເປີດເມື່ອຄົນຂັບຮັບງານແລ້ວ.",
+  cancelRide: "ຍົກເລີກການເອີ້ນລົດ",
+  cancelRideConfirm: "ຢືນຢັນຍົກເລີກການເອີ້ນລົດນີ້ບໍ?",
+  stayOnTracker: "ກະລຸນາຢູ່ໜ້ານີ້ຂະນະທີ່ TAXILAO ກຳລັງຫາຄົນຂັບ."
 };
 
 const translations: Record<Locale, UiCopy> = {

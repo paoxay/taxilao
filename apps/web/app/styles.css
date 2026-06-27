@@ -3816,6 +3816,103 @@ strong,
   object-fit: cover;
 }
 
+.ride-chat-card,
+.ride-chat-locked {
+  margin-top: 12px;
+  background: #0d1714;
+  border: 1px solid rgba(241, 203, 113, 0.24);
+  border-radius: 7px;
+}
+
+.ride-chat-card {
+  padding: 12px;
+}
+
+.ride-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ride-chat-head small,
+.ride-chat-messages p,
+.ride-chat-bubble small,
+.ride-chat-locked {
+  color: #9fb0a8;
+}
+
+.ride-chat-messages {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.ride-chat-bubble {
+  display: grid;
+  gap: 3px;
+  width: min(86%, 360px);
+  padding: 9px 10px;
+  background: #17231f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+}
+
+.ride-chat-bubble.mine {
+  justify-self: end;
+  color: #07130d;
+  background: #f1cb71;
+  border-color: rgba(241, 203, 113, 0.55);
+}
+
+.ride-chat-bubble.mine small {
+  color: rgba(7, 19, 13, 0.68);
+}
+
+.ride-chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ride-chat-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  color: #f7faf8;
+  background: #17211d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.ride-chat-form button {
+  display: grid;
+  place-items: center;
+  color: #07130d;
+  background: #f1cb71;
+  border: 0;
+  border-radius: 6px;
+}
+
+.ride-chat-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ride-chat-error {
+  display: block;
+  margin-top: 8px;
+  color: #ff9d9d;
+}
+
+.ride-chat-locked {
+  padding: 11px 12px;
+}
+
 .ride-live-map-card {
   margin-top: 12px;
   overflow: hidden;
@@ -4009,6 +4106,20 @@ strong,
 
 .ride-live-footer > span {
   display: grid;
+}
+
+.ride-cancel-btn {
+  color: #ffd1d1;
+  background: rgba(189, 74, 74, 0.16);
+  border-color: rgba(255, 109, 109, 0.32);
+}
+
+.ride-live-lock {
+  flex: 1;
+  min-width: 190px;
+  color: #9fb0a8;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .driver-login-screen,

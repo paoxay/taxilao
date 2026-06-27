@@ -156,6 +156,7 @@ Important collections:
 - `payments`
 - `reviews`
 - `driverLedger`
+- `chatMessages`
 - `settings`
 - `adminLogs`
 
@@ -319,6 +320,8 @@ Public/member:
 - `POST /bookings`
 - `POST /bookings/lookup`
 - `GET /bookings/me`
+- `GET /bookings/:id/chat`
+- `POST /bookings/:id/chat`
 - `POST /reviews`
 - `GET /maps/search`
 - `GET /maps/reverse`
@@ -375,6 +378,23 @@ Driver APK behavior:
   offered to the next nearest eligible driver.
 - Active job GPS is sent to `/driver/bookings/:id/location`.
 - Driver status flow is `CONFIRMED` -> `ON_THE_WAY` -> `IN_PROGRESS` -> `COMPLETED`.
+- Driver APK plays a distinct in-app sound for new pending/offered jobs and another
+  sound when a job is accepted.
+- Driver APK has three distinct sounds: new order, manually accepted order, and
+  auto-accepted order.
+- Driver APK also raises local Android notifications for new and accepted jobs.
+- Driver APK must keep online/auto-accept disabled unless location permission is
+  granted as "Allow all the time"; this is required for background GPS and dispatch.
+- Driver job details show a live map preview with driver, pickup, and dropoff pins,
+  plus the driver's distance to pickup when current GPS is available. The
+  driver-to-pickup line must use the real `/maps/route` road geometry rather than
+  a straight-line polyline.
+- When a driver has an active job, the APK only shows that active job and suppresses
+  other pending/offered jobs until the active job is completed or cancelled.
+- Driver history is newest-first, and the profile shows local gross completed-order
+  totals for today, this week, and this month.
+- Driver API routes use rate limits for reads, status/availability writes, and GPS
+  updates to reduce abuse while leaving normal realtime polling/GPS usable.
 - Drivers can cancel an accepted active job from the app before it is completed.
 - Driver wallet is stored on `drivers.walletBalanceLak`; every manual admin adjustment
   and order commission debit is recorded in `driverLedger`. Admin can credit/debit a
@@ -424,6 +444,15 @@ Driver APK behavior:
 - Creating any booking requires an authenticated `USER` member. Web booking forms are
   wrapped in `MemberAuthGate`; Google OAuth signs and preserves a safe relative
   `returnTo` path so users return to the exact taxi/driver/tour booking URL.
+- After a taxi request is created, the live tracker is the primary customer surface.
+  It hides the close action until the booking is completed or cancelled, warns on
+  browser unload while active, and allows customer cancellation only while the booking
+  is `PENDING` or `OFFERED`.
+- Customer cancellation is blocked after a driver accepts the booking. Accepted trips
+  use in-trip chat between the authenticated customer and the assigned driver.
+- Booking chat is stored in `chatMessages`. Chat endpoints allow only the booking
+  owner or assigned driver, rate-limit reads/writes, and accept text plus guarded
+  image/audio data URL attachments for later media UI.
 - A meter price shown before booking is an estimate. `finalPriceLak` remains unset until
   a later trip-completion/meter-settlement workflow records the actual fare.
 - Customer pickup and destination points can be selected precisely in a lazy-loaded
