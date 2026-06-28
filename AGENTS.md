@@ -536,6 +536,7 @@ Driver APK behavior:
   cancellation, driver cancellation, completion, or another terminal status.
 - Customer cancellation is blocked after a driver accepts the booking. Accepted trips
   use in-trip chat between the authenticated customer and the assigned driver.
+- Booking chat endpoints intentionally do not use `requireActiveMember`, because both authenticated `USER` members and authenticated `DRIVER` accounts must access the same `/bookings/:id/chat` routes. Keep `authenticate` on those routes and let `getAuthorizedChatBooking()` enforce owner/assigned-driver access and active-trip write rules.
 - Booking chat is stored in `chatMessages`. Chat endpoints allow only the booking
   owner or assigned driver, rate-limit reads/writes, and accept text plus guarded
   image/audio data URL attachments for later media UI.

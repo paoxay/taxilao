@@ -2632,7 +2632,7 @@ app.patch("/bookings/:id/status", authenticate, requireActiveMember, async (req,
   }
 });
 
-app.get("/bookings/:id/chat", chatReadLimiter, authenticate, requireActiveMember, async (req, res, next) => {
+app.get("/bookings/:id/chat", chatReadLimiter, authenticate, async (req, res, next) => {
   try {
     await getAuthorizedChatBooking(req, req.params.id);
     const messages = await db.collection("chatMessages")
@@ -2646,7 +2646,7 @@ app.get("/bookings/:id/chat", chatReadLimiter, authenticate, requireActiveMember
   }
 });
 
-app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, requireActiveMember, async (req, res, next) => {
+app.post("/bookings/:id/chat", chatWriteLimiter, authenticate, async (req, res, next) => {
   try {
     const booking = await getAuthorizedChatBooking(req, req.params.id, { requireActive: true });
     const text = String(req.body.text || "").trim().slice(0, 1200);
