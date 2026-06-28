@@ -122,6 +122,29 @@ AI agents must not leave Web, Admin, API, ngrok, or helper servers running in th
 background unless the user explicitly asks for it. Background servers previously
 caused repeated `EADDRINUSE` failures.
 
+## Production Deploy
+
+Preferred VPS deploy command after code is pushed to GitHub:
+
+```bash
+cd /var/www/taxilao
+bash scripts/deploy-production.sh
+```
+
+The script pulls `origin/main`, runs `npm install`, verifies `apps/api/app.js`,
+builds API/Web/Admin, restarts `taxilao-api`, `taxilao-web`, and `taxilao-admin`
+with PM2, saves PM2, then smoke-tests `https://api.taxilao.com/health`,
+`https://taxilao.com`, `https://admin.taxilao.com`, and vehicle categories.
+
+If production behaves like an old version while localhost works, suspect one of:
+
+- GitHub does not contain the latest local commit.
+- VPS `git pull` did not fast-forward because the server working tree is dirty.
+- PM2 is running an old process, wrong cwd, or was not restarted with `--update-env`.
+- Next.js `.next` was not rebuilt after changing frontend code or environment.
+- Cloudflare/browser cache is still serving old static chunks.
+- Nginx points the domain to a different port/process than expected.
+
 ## Build And Verification
 
 After changes, run the builds for every affected app:

@@ -20,7 +20,8 @@
     "db:generate": "npm run prisma:generate --workspace @taxilao/database",
     "db:push": "npm run prisma:push --workspace @taxilao/database",
     "db:migrate": "npm run prisma:migrate --workspace @taxilao/database",
-    "db:seed": "npm run prisma:seed --workspace @taxilao/database"
+    "db:seed": "npm run prisma:seed --workspace @taxilao/database",
+    "deploy:server": "bash scripts/deploy-production.sh"
   },
   "engines": {
     "node": ">=20.0.0"
