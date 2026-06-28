@@ -1,4 +1,4 @@
-# TAXILAO.COM AI Project Memory
+﻿# TAXILAO.COM AI Project Memory
 
 This file is the operating memory for AI coding agents working in this repository.
 Read it before changing code. Keep it updated when architecture, security, commands,
@@ -350,6 +350,7 @@ Admin:
 - `PATCH|DELETE /admin/vehicle-categories/:id`
 - `GET /admin/bookings`
 - `PATCH /admin/bookings/:id`
+- `PATCH /admin/bookings/:id/status`
 - `GET /admin/payments`
 - `PATCH /admin/payments/:id`
 - `GET|POST /admin/tours`

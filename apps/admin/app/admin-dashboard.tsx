@@ -92,6 +92,9 @@ type Booking = {
   passengers: number;
   status: string;
   estimatedPriceLak: number;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
   payment?: Payment;
 };
 
@@ -942,6 +945,23 @@ export function AdminDashboard() {
     }
   }
 
+  async function cancelBooking(id: string) {
+    const reason = window.prompt("Cancel reason", "Admin cancelled stuck booking");
+    if (reason === null) return;
+    try {
+      const response = await fetch(`${apiUrl}/admin/bookings/${id}/status`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ status: "CANCELLED", reason: reason.trim() || "Admin cancelled stuck booking" })
+      });
+      await readJson(response, null, "cancel booking");
+      await loadData();
+      setMessage("Booking cancelled");
+    } catch (error) {
+      setMessage(error instanceof Error ? `Cancel booking failed: ${error.message}` : "Cancel booking failed");
+    }
+  }
+
   async function updatePayment(id: string | undefined, body: Record<string, unknown>) {
     if (!id) return;
     try {
@@ -1507,6 +1527,9 @@ export function AdminDashboard() {
                   </td>
                   <td className="table-actions">
                     <button className="btn" onClick={() => editBooking(booking)} type="button"><Edit size={16} /> ແກ້</button>
+                    {!["COMPLETED", "CANCELLED"].includes(booking.status) ? (
+                      <button className="btn danger" onClick={() => cancelBooking(booking.id)} type="button"><Ban size={16} /> Cancel</button>
+                    ) : null}
                   </td>
                 </tr>
               ))}

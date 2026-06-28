@@ -3358,9 +3358,16 @@ app.patch("/admin/bookings/:id/status", requireAdmin, async (req, res, next) => 
       return res.status(400).json({ message: "Invalid booking status" });
     }
 
+    const updates = { status, updatedAt: new Date() };
+    if (status === "CANCELLED") {
+      updates.cancelledAt = new Date();
+      updates.cancelledBy = "ADMIN";
+      updates.cancellationReason = String(req.body.reason || "Admin cancelled this booking").trim().slice(0, 300);
+    }
+
     await db.collection("bookings").updateOne(
       { id: req.params.id },
-      { $set: { status, updatedAt: new Date() } }
+      { $set: updates }
     );
     const booking = await db.collection("bookings").findOne({ id: req.params.id });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
@@ -3457,6 +3464,11 @@ app.patch("/admin/bookings/:id", requireAdmin, async (req, res, next) => {
     if (req.body.status !== undefined) {
       if (!bookingStatuses.includes(req.body.status)) return res.status(400).json({ message: "Invalid booking status" });
       updates.status = req.body.status;
+      if (req.body.status === "CANCELLED") {
+        updates.cancelledAt = new Date();
+        updates.cancelledBy = "ADMIN";
+        updates.cancellationReason = String(req.body.reason || "Admin cancelled this booking").trim().slice(0, 300);
+      }
     }
 
     updates.updatedAt = new Date();
