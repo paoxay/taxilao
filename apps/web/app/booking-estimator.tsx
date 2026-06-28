@@ -417,7 +417,7 @@ function BookingEstimatorForm({
       });
 
     return () => controller.abort();
-  }, [apiUrl, copy.routeFailed, driverId, dropoffCoordinates, pickupCoordinates, selectedTour]);
+  }, [apiUrl, copy.routeFailed, driverId, dropoffCoordinates, pickupCoordinates, selectedTour, selectedVehicleCategory?.id]);
 
   async function useCurrentLocation() {
     if (!navigator.geolocation) {

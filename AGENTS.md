@@ -26,6 +26,33 @@ Admin workflows:
 - Admin Finance center manages driver wallets, ledger history, manual credits/debits, commission settings, and low-balance monitoring.
 - Manage vehicle categories, visibility, capacity, per-km rate, minimum fare, and default vehicle choice.
 
+## System Boundaries
+
+TAXILAO has three separate product systems. Keep their UI, auth, APIs, and data
+contracts separate unless the task explicitly requires integration.
+
+1. Customer/member Web (`apps/web`)
+   - Public TAXILAO website for members and guests to browse drivers/tours, sign in
+     with Google, create taxi requests, track ride status, chat after driver acceptance,
+     review trips, and view member history/profile.
+   - Member role is `USER`. Do not add admin or driver controls to customer pages.
+
+2. Driver APK (`apps/driver_app`)
+   - Flutter Android app for drivers only: username/password login, online/auto/GPS
+     state, offered jobs, active jobs, route preview, chat/call after accepted job,
+     history, profile, wallet balance, and background location/notifications.
+   - Driver role is `DRIVER`. Do not allow Google member login or admin tokens here.
+
+3. Admin dashboard (`apps/admin`)
+   - Lao-first back office for staff only: manage members, drivers, wallets, bookings,
+     order history, payments, tours, places, vehicle categories, pricing, and audits.
+   - Admin routes require `requireAdmin`. Admin-only destructive actions such as
+     deleting users or bookings must require an explicit UI confirmation and be logged.
+
+Guardrail: when changing one system, inspect the shared API contract and update only
+the affected consumers. Never mix member, driver, and admin authentication or expose
+secrets/admin functions in Web or Driver UI.
+
 ## Repository Architecture
 
 This is an npm workspace monorepo.
@@ -342,6 +369,7 @@ Admin:
 - `GET /admin/dashboard`
 - `GET /admin/users`
 - `PATCH /admin/users/:id/status`
+- `DELETE /admin/users/:id`
 - `GET|POST /admin/drivers`
 - `PATCH|DELETE /admin/drivers/:id`
 - `GET|POST /admin/drivers/:id/wallet`
@@ -351,6 +379,8 @@ Admin:
 - `GET /admin/bookings`
 - `PATCH /admin/bookings/:id`
 - `PATCH /admin/bookings/:id/status`
+- `DELETE /admin/bookings`
+- `DELETE /admin/bookings/:id`
 - `GET /admin/payments`
 - `PATCH /admin/payments/:id`
 - `GET|POST /admin/tours`
@@ -439,6 +469,7 @@ Driver APK behavior:
 ## Known Operational Issues
 
 - `EADDRINUSE` means another process already listens on the requested port.
+- If Admin shows `Cannot DELETE /admin/users/:id`, the running API process is old or missing the delete route. Pull/build/restart `taxilao-api`; the correct API returns JSON such as `Member not found`, `Member has active bookings`, or `{ ok: true }`, not Express plain text `Cannot DELETE ...`.
 - A server may remain orphaned after its terminal closes. Find it with
   `Get-NetTCPConnection` and stop only the owning process.
 - MongoDB Atlas requires the current public IP in Network Access.
@@ -450,6 +481,7 @@ Driver APK behavior:
   are recalculated by the API before a booking is stored.
 - Vehicle categories are stored in MongoDB collection `vehicleCategories`. Admin can create, edit, disable, hide/show on Web, set default, capacity, `ratePerKmLak`, and `minimumFareLak`. Public Web only reads active and visible categories from `GET /vehicle-categories`.
 - Regular taxi requests (`RIDE`) without a selected driver store `vehicleCategoryId`, `vehicleCategoryName`, and `vehicleCategorySnapshot`. Route estimates and booking prices must be calculated server-side from the active vehicle category; never trust a client-sent price. If no category is sent, the API falls back to the default active category (currently SUV) for backward compatibility.
+- Route estimates must pass `vehicleCategoryId` through `/maps/route` into `calculateRoute(pickupCoordinates, dropoffCoordinates, driverId, vehicleCategoryId)` so map picker movement recalculates the correct category price. Do not reference `vehicleCategoryId` inside route calculation unless it is an explicit parameter.
 - Fare mode is determined by booking type, not freely chosen: a regular taxi request
   without a selected driver is `FIXED`; booking a specific driver is `METER`; tour
   packages remain fixed-price. Meter bookings require explicit customer consent and
@@ -461,6 +493,14 @@ Driver APK behavior:
 - Creating any booking requires an authenticated `USER` member. Web booking forms are
   wrapped in `MemberAuthGate`; Google OAuth signs and preserves a safe relative
   `returnTo` path so users return to the exact taxi/driver/tour booking URL.
+- Admin booking management separates active bookings from order history. Active
+  bookings are `PENDING`, `OFFERED`, `CONFIRMED`, `ON_THE_WAY`, and `IN_PROGRESS`.
+  Order history is `COMPLETED` and `CANCELLED`. Admin can cancel/update orders and
+  can hard-delete booking records when explicitly confirmed; deleting a booking cascades
+  related `payments`, `chatMessages`, and `reviews` for that booking and emits a
+  booking update.
+- Admin can delete `USER` member accounts. Deletion is blocked while the member has
+  active bookings unless a future force-delete workflow is intentionally used.
 - After a taxi request is created, the live tracker is the primary customer surface.
   It hides the close action until the booking is completed or cancelled, warns on
   browser unload while active, blocks browser back while active, and allows customer

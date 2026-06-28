@@ -639,7 +639,7 @@ async function reversePlace(coordinates) {
   };
 }
 
-async function calculateRoute(pickupCoordinates, dropoffCoordinates, driverId) {
+async function calculateRoute(pickupCoordinates, dropoffCoordinates, driverId, vehicleCategoryId = null) {
   let route;
 
   if (mapboxConfigured) {
