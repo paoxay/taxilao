@@ -2899,6 +2899,35 @@ app.patch("/admin/users/:id/status", requireAdmin, async (req, res, next) => {
     next(error);
   }
 });
+
+app.delete("/admin/users/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const user = await db.collection("users").findOne({ id: req.params.id, role: "USER" });
+    if (!user) return res.status(404).json({ message: "Member not found" });
+
+    const activeBookings = await db.collection("bookings").countDocuments({
+      userId: user.id,
+      status: { $in: ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"] }
+    });
+    if (activeBookings > 0 && req.query.force !== "true") {
+      return res.status(409).json({ message: "Member has active bookings. Cancel or delete bookings first." });
+    }
+
+    const result = await db.collection("users").deleteOne({ id: user.id, role: "USER" });
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "USER_DELETED",
+      targetId: user.id,
+      actorId: req.user.id,
+      metadata: { email: user.email, bookingCount: await db.collection("bookings").countDocuments({ userId: user.id }) },
+      createdAt: new Date()
+    });
+
+    res.json({ ok: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/admin/drivers", requireAdmin, async (_req, res, next) => {
   try {
     const drivers = await db.collection("drivers").find({}).sort({ verified: 1, premium: -1, createdAt: -1 }).toArray();
@@ -3321,6 +3350,18 @@ app.patch("/admin/drivers/:id/premium", requireAdmin, async (req, res, next) => 
   }
 });
 
+async function deleteBookingCascade(bookingId) {
+  const booking = await db.collection("bookings").findOne({ id: bookingId });
+  if (!booking) return null;
+
+  await db.collection("payments").deleteMany({ bookingId });
+  await db.collection("chatMessages").deleteMany({ bookingId });
+  await db.collection("reviews").deleteMany({ bookingId });
+  await db.collection("bookings").deleteOne({ id: bookingId });
+  await emitBookingUpdate(bookingId);
+  return booking;
+}
+
 app.get("/admin/bookings", requireAdmin, async (_req, res, next) => {
   try {
     const bookings = await db.collection("bookings").aggregate([
@@ -3495,6 +3536,56 @@ app.patch("/admin/bookings/:id", requireAdmin, async (req, res, next) => {
 
     await emitBookingUpdate(booking.id);
     res.json(booking);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/admin/bookings", requireAdmin, async (req, res, next) => {
+  try {
+    const status = String(req.query.status || "").toUpperCase();
+    const filter = status && bookingStatuses.includes(status) ? { status } : {};
+    const bookings = await db.collection("bookings").find(filter).project({ id: 1 }).toArray();
+    const ids = bookings.map((booking) => booking.id);
+
+    if (ids.length) {
+      await db.collection("payments").deleteMany({ bookingId: { $in: ids } });
+      await db.collection("chatMessages").deleteMany({ bookingId: { $in: ids } });
+      await db.collection("reviews").deleteMany({ bookingId: { $in: ids } });
+      await db.collection("bookings").deleteMany({ id: { $in: ids } });
+      await Promise.all(ids.slice(0, 100).map((id) => emitBookingUpdate(id)));
+    }
+
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "BOOKINGS_BULK_DELETED",
+      targetId: status || "ALL",
+      actorId: req.user.id,
+      metadata: { count: ids.length, status: status || null },
+      createdAt: new Date()
+    });
+
+    res.json({ ok: true, deletedCount: ids.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/admin/bookings/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const booking = await deleteBookingCascade(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "BOOKING_DELETED",
+      targetId: booking.id,
+      actorId: req.user.id,
+      metadata: { status: booking.status, userId: booking.userId || null, driverId: booking.driverId || null },
+      createdAt: new Date()
+    });
+
+    res.json({ ok: true, deletedId: booking.id });
   } catch (error) {
     next(error);
   }

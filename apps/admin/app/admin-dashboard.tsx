@@ -156,11 +156,13 @@ type Pricing = {
   driverLowBalanceWarningLak: number;
 };
 
-type AdminSection = "dashboard" | "users" | "drivers" | "finance" | "vehicles" | "places" | "tours" | "bookings" | "payments";
+type AdminSection = "dashboard" | "users" | "drivers" | "finance" | "vehicles" | "places" | "tours" | "bookings" | "orders" | "payments";
 
 const bookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const paymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED"];
 const paymentMethods = ["CASH", "BANK_QR", "CARD", "USDT_TRC20", "USDT_BEP20"];
+const activeBookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
+const historyBookingStatuses = ["COMPLETED", "CANCELLED"];
 const adminSections: Array<{ id: AdminSection; label: string }> = [
   { id: "dashboard", label: "ໜ້າລວມ" },
   { id: "users", label: "ສະມາຊິກ" },
@@ -170,6 +172,7 @@ const adminSections: Array<{ id: AdminSection; label: string }> = [
   { id: "places", label: "ສະຖານທີ່" },
   { id: "tours", label: "ທົວ" },
   { id: "bookings", label: "ການຈອງ" },
+  { id: "orders", label: "Order History" },
   { id: "payments", label: "ການຊຳລະ" }
 ];
 
@@ -286,6 +289,8 @@ export function AdminDashboard() {
 
   const pendingDrivers = useMemo(() => drivers.filter((driver) => !driver.verified), [drivers]);
   const suspendedUsers = useMemo(() => users.filter((user) => user.status === "SUSPENDED"), [users]);
+  const activeAdminBookings = useMemo(() => bookings.filter((booking) => activeBookingStatuses.includes(booking.status)), [bookings]);
+  const orderHistoryBookings = useMemo(() => bookings.filter((booking) => historyBookingStatuses.includes(booking.status)), [bookings]);
   const financeDriver = useMemo(() => drivers.find((driver) => driver.id === financeDriverId) || drivers[0] || null, [drivers, financeDriverId]);
   const lowBalanceDrivers = useMemo(() => drivers.filter((driver) => driver.walletLowBalance), [drivers]);
   const totalDriverWalletLak = useMemo(() => drivers.reduce((total, driver) => total + Number(driver.walletBalanceLak || 0), 0), [drivers]);
@@ -465,6 +470,18 @@ export function AdminDashboard() {
       meterIncludedKm: 2, meterRatePerKmLak: 15000, meterRatePerMinuteLak: 1000,
       driverCommissionPercent: 10, driverMinimumBalanceLak: 20000, driverLowBalanceWarningLak: 50000
     });
+  }
+
+  async function deleteUser(userId: string) {
+    if (!window.confirm("Delete this user?")) return;
+    try {
+      const response = await fetch(`${apiUrl}/admin/users/${userId}`, { method: "DELETE", headers: authHeaders() });
+      await readJson(response, null, "delete user");
+      await loadData();
+      setMessage("User deleted");
+    } catch (error) {
+      setMessage(error instanceof Error ? `Delete user failed: ${error.message}` : "Delete user failed");
+    }
   }
 
   async function updateUserStatus(userId: string, status: "ACTIVE" | "SUSPENDED") {
@@ -945,6 +962,36 @@ export function AdminDashboard() {
     }
   }
 
+  async function deleteBooking(id: string) {
+    if (!window.confirm("Delete this booking and related chat/payment/reviews?")) return;
+    try {
+      const response = await fetch(`${apiUrl}/admin/bookings/${id}`, { method: "DELETE", headers: authHeaders() });
+      await readJson(response, null, "delete booking");
+      if (editingBookingId === id) resetBookingForm();
+      await loadData();
+      setMessage("Booking deleted");
+    } catch (error) {
+      setMessage(error instanceof Error ? `Delete booking failed: ${error.message}` : "Delete booking failed");
+    }
+  }
+
+  async function deleteBookingsByStatus(statuses: string[]) {
+    if (!window.confirm("Delete all matching bookings?")) return;
+    try {
+      let deletedCount = 0;
+      for (const status of statuses) {
+        const response = await fetch(`${apiUrl}/admin/bookings?status=${status}`, { method: "DELETE", headers: authHeaders() });
+        const data = await readJson(response, {}, "delete bookings") as { deletedCount?: number };
+        deletedCount += Number(data?.deletedCount || 0);
+      }
+      resetBookingForm();
+      await loadData();
+      setMessage(`Deleted bookings: ${deletedCount}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Bulk delete failed: ${error.message}` : "Bulk delete failed");
+    }
+  }
+
   async function cancelBooking(id: string) {
     const reason = window.prompt("Cancel reason", "Admin cancelled stuck booking");
     if (reason === null) return;
@@ -1197,6 +1244,7 @@ export function AdminDashboard() {
                       ) : (
                         <button className="btn danger" onClick={() => updateUserStatus(user.id, "SUSPENDED")} type="button"><Ban size={14} /> ປິດ</button>
                       )}
+                      <button className="btn danger" onClick={() => deleteUser(user.id)} type="button"><Trash2 size={14} /> Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -1451,7 +1499,10 @@ export function AdminDashboard() {
 
         {activeSection === "bookings" ? (
         <>
-        <h2 id="bookings">ຈັດການການຈອງ</h2>
+        <h2 id="bookings">Active Bookings</h2>
+        <div className="table-actions">
+          <button className="btn danger" onClick={() => deleteBookingsByStatus(activeBookingStatuses)} type="button"><Trash2 size={16} /> Delete Active Bookings</button>
+        </div>
         {editingBookingId ? (
           <form className="admin-form" onSubmit={saveBooking}>
             <h3>ແກ້ໄຂການຈອງ #{editingBookingId.slice(0, 8)}</h3>
@@ -1499,7 +1550,7 @@ export function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {bookings.map((booking) => (
+              {activeAdminBookings.map((booking) => (
                 <tr key={booking.id}>
                   <td>{booking.id.slice(0, 8)}</td>
                   <td>{booking.customerName ?? "-"}</td>
@@ -1527,6 +1578,7 @@ export function AdminDashboard() {
                   </td>
                   <td className="table-actions">
                     <button className="btn" onClick={() => editBooking(booking)} type="button"><Edit size={16} /> ແກ້</button>
+                    <button className="btn danger" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={16} /> Delete</button>
                     {!["COMPLETED", "CANCELLED"].includes(booking.status) ? (
                       <button className="btn danger" onClick={() => cancelBooking(booking.id)} type="button"><Ban size={16} /> Cancel</button>
                     ) : null}
@@ -1538,6 +1590,31 @@ export function AdminDashboard() {
         </div>
         </>
         ) : null}
+        {activeSection === "orders" ? (
+        <>
+        <h2 id="orders">Order History</h2>
+        <div className="table-actions">
+          <span className="admin-kpi-chip"><CalendarDays size={15} /> {orderHistoryBookings.length} orders</span>
+          <button className="btn danger" onClick={() => deleteBookingsByStatus(historyBookingStatuses)} type="button"><Trash2 size={16} /> Delete History</button>
+        </div>
+        <div className="table-wrap">
+          <table className="table compact-table">
+            <thead><tr><th>ID</th><th>Customer</th><th>Contact</th><th>Driver</th><th>Route</th><th>Fare</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {orderHistoryBookings.length ? orderHistoryBookings.map((booking) => (
+                <tr key={booking.id}>
+                  <td>{booking.id.slice(0, 8)}</td><td>{booking.customerName ?? "-"}</td><td>{booking.customerWhatsapp || booking.customerPhone || "-"}</td><td>{booking.driverName || "-"}</td><td>{booking.pickup} ? {booking.dropoff}</td><td>{formatLak(booking.estimatedPriceLak)}</td>
+                  <td><select className="status-select" value={booking.status} onChange={(event) => updateBooking(booking.id, { status: event.target.value })}>{bookingStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></td>
+                  <td className="table-actions"><button className="btn" onClick={() => editBooking(booking)} type="button"><Edit size={16} /> Edit</button><button className="btn danger" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={16} /> Delete</button></td>
+                </tr>
+              )) : <tr><td colSpan={8}>No order history</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        </>
+        ) : null}
+
+
 
         {activeSection === "finance" ? (
         <>
