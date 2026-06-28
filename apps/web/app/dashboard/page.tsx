@@ -76,7 +76,9 @@ type MemberTokens = {
   refreshToken: string;
 };
 
-const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];`r`nconst lastBookingKey = "taxilao_last_booking_id";`r`nconst liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
+const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
+const lastBookingKey = "taxilao_last_booking_id";
+const liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
 const dismissedBookingKey = "taxilao_dismissed_booking_id";
 const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
 
@@ -101,7 +103,17 @@ function dismissBookingId(id: string) {
   localStorage.setItem(dismissedBookingKey, id);
 }
 
-function undismissBookingId(id: string) {`r`n  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);`r`n  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));`r`n  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);`r`n}`r`n`r`nfunction clearStoredBookingId(id?: string) {`r`n  if (!id || localStorage.getItem(lastBookingKey) === id) {`r`n    localStorage.removeItem(lastBookingKey);`r`n  }`r`n}
+function undismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);
+}
+
+function clearStoredBookingId(id?: string) {
+  if (!id || localStorage.getItem(lastBookingKey) === id) {
+    localStorage.removeItem(lastBookingKey);
+  }
+}
 
 export default function UserDashboardPage() {
   const apiUrl = getApiUrl();
@@ -210,7 +222,14 @@ export default function UserDashboardPage() {
     void restoreMemberSession();
   }, []);
 
-  useEffect(() => {`r`n    if (!booking) return;`r`n    if (activeStatuses.includes(booking.status)) {`r`n      localStorage.setItem(lastBookingKey, booking.id);`r`n    } else {`r`n      dismissBookingId(booking.id);`r`n      clearStoredBookingId(booking.id);`r`n    }
+  useEffect(() => {
+    if (!booking) return;
+    if (activeStatuses.includes(booking.status)) {
+      localStorage.setItem(lastBookingKey, booking.id);
+    } else {
+      dismissBookingId(booking.id);
+      clearStoredBookingId(booking.id);
+    }
     if (booking.customerPhone || booking.customerWhatsapp) {
       localStorage.setItem("taxilao_last_booking_phone", booking.customerPhone || booking.customerWhatsapp || "");
     }
@@ -339,7 +358,8 @@ export default function UserDashboardPage() {
               localStorage.setItem(lastBookingKey, nextBooking.id);
               return;
             }
-            dismissBookingId(nextBooking.id);`r`n            clearStoredBookingId(nextBooking.id);
+            dismissBookingId(nextBooking.id);
+            clearStoredBookingId(nextBooking.id);
             setBooking(null);
           }}
         />

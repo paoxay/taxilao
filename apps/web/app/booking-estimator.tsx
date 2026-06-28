@@ -64,7 +64,9 @@ type BookingTour = {
   driverId?: string;
 };
 
-const activeBookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];`r`nconst lastBookingKey = "taxilao_last_booking_id";`r`nconst dismissedBookingKey = "taxilao_dismissed_booking_id";
+const activeBookingStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
+const lastBookingKey = "taxilao_last_booking_id";
+const dismissedBookingKey = "taxilao_dismissed_booking_id";
 const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
 
 function getDismissedBookingIds() {
@@ -88,7 +90,17 @@ function dismissBookingId(id: string) {
   localStorage.setItem(dismissedBookingKey, id);
 }
 
-function undismissBookingId(id: string) {`r`n  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);`r`n  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));`r`n  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);`r`n}`r`n`r`nfunction clearStoredBookingId(id?: string) {`r`n  if (!id || localStorage.getItem(lastBookingKey) === id) {`r`n    localStorage.removeItem(lastBookingKey);`r`n  }`r`n}
+function undismissBookingId(id: string) {
+  const ids = Array.from(getDismissedBookingIds()).filter((item) => item !== id);
+  localStorage.setItem(dismissedBookingsKey, JSON.stringify(ids));
+  if (localStorage.getItem(dismissedBookingKey) === id) localStorage.removeItem(dismissedBookingKey);
+}
+
+function clearStoredBookingId(id?: string) {
+  if (!id || localStorage.getItem(lastBookingKey) === id) {
+    localStorage.removeItem(lastBookingKey);
+  }
+}
 
 type LocationFieldProps = {
   apiUrl: string;
@@ -324,7 +336,14 @@ function BookingEstimatorForm({
         if (!response.ok || !Array.isArray(data) || cancelled) return;
         const restored = data.find((item: LiveBooking) => item.id === savedBookingId && !dismissedBookingIds.has(item.id) && activeBookingStatuses.includes(item.status))
           ?? data.find((item: LiveBooking) => !dismissedBookingIds.has(item.id) && activeBookingStatuses.includes(item.status));
-        if (!restored) {`r`n          if (savedBookingId && data.some((item: LiveBooking) => item.id === savedBookingId && !activeBookingStatuses.includes(item.status))) {`r`n            dismissBookingId(savedBookingId);`r`n            clearStoredBookingId(savedBookingId);`r`n          }`r`n          return;`r`n        }`r`n        setLiveBooking(restored);
+        if (!restored) {
+          if (savedBookingId && data.some((item: LiveBooking) => item.id === savedBookingId && !activeBookingStatuses.includes(item.status))) {
+            dismissBookingId(savedBookingId);
+            clearStoredBookingId(savedBookingId);
+          }
+          return;
+        }
+        setLiveBooking(restored);
         setLiveToken(token);
       } catch {
         // Keep the booking form usable if restore fails.
@@ -688,7 +707,8 @@ function BookingEstimatorForm({
               localStorage.setItem(lastBookingKey, nextBooking.id);
               return;
             }
-            dismissBookingId(nextBooking.id);`r`n            clearStoredBookingId(nextBooking.id);
+            dismissBookingId(nextBooking.id);
+            clearStoredBookingId(nextBooking.id);
             setLiveBooking(null);
           }}
         />
