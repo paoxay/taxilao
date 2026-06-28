@@ -603,6 +603,23 @@ export function AdminDashboard() {
     }
   }
 
+  async function deleteDriver(driver: Driver) {
+    const confirmed = window.confirm(`Delete driver "${driver.name}" permanently? This cannot be undone. Active orders must be cancelled or completed first.`);
+    if (!confirmed) return;
+    try {
+      const response = await fetch(`${apiUrl}/admin/drivers/${driver.id}/hard-delete`, { method: "DELETE", headers: authHeaders() });
+      await readJson(response, null, "delete driver");
+      if (editingId === driver.id) {
+        resetDriverForm();
+        setShowDriverForm(false);
+      }
+      await loadData();
+      setMessage(`Deleted driver: ${driver.name}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Delete driver failed: ${error.message}` : "Delete driver failed");
+    }
+  }
+
   async function disableDriver(id: string) {
     try {
       const response = await fetch(`${apiUrl}/admin/drivers/${id}`, { method: "DELETE", headers: authHeaders() });
@@ -1078,14 +1095,20 @@ export function AdminDashboard() {
       </aside>
 
       <section className="admin-main">
-        <p className="eyebrow">ລະບົບຫຼັງບ້ານ</p>
-        <h1 style={{ fontSize: "clamp(32px, 5vw, 56px)", marginBottom: 24 }}>ສູນຄວບຄຸມ TAXILAO</h1>
-        <button className="btn btn-primary" onClick={loadData} type="button">
-          <RefreshCcw size={16} /> ໂຫຼດໃໝ່
-        </button>
-        <button className="btn admin-logout" onClick={logout} type="button">
-          <LogOut size={16} /> ອອກຈາກລະບົບ
-        </button>
+        <div className="admin-topbar">
+          <div>
+            <p className="eyebrow">ລະບົບຫຼັງບ້ານ</p>
+            <h1 style={{ margin: 0, fontSize: "clamp(24px, 3vw, 34px)" }}>ສູນຄວບຄຸມ TAXILAO</h1>
+          </div>
+          <div className="admin-topbar-actions">
+            <button className="btn btn-primary" onClick={loadData} type="button">
+              <RefreshCcw size={15} /> ໂຫຼດໃໝ່
+            </button>
+            <button className="btn admin-logout" onClick={logout} type="button">
+              <LogOut size={15} /> ອອກຈາກລະບົບ
+            </button>
+          </div>
+        </div>
         {message ? <p className="admin-message">{message}</p> : null}
 
         {activeSection === "dashboard" ? (
@@ -1173,8 +1196,8 @@ export function AdminDashboard() {
                   </td>
                   <td>
                     <div className="table-actions mini-actions">
-                      <button className="btn" onClick={() => editVehicleCategory(category)} type="button"><Edit size={14} /> ແກ້ໄຂ</button>
-                      <button className="btn danger" onClick={() => disableVehicleCategory(category.id)} type="button"><Ban size={14} /> ປິດ</button>
+                      <button className="icon-btn" title="ແກ້ໄຂຫມວດລົດ" onClick={() => editVehicleCategory(category)} type="button"><Edit size={15} /></button>
+                      <button className="icon-btn danger" title="ປິດໃຊ້ງານຫມວດລົດ" onClick={() => disableVehicleCategory(category.id)} type="button"><Ban size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1240,11 +1263,11 @@ export function AdminDashboard() {
                   <td>
                     <div className="table-actions mini-actions">
                       {user.status === "SUSPENDED" ? (
-                        <button className="btn" onClick={() => updateUserStatus(user.id, "ACTIVE")} type="button"><BadgeCheck size={14} /> ເປີດ</button>
+                        <button className="icon-btn ok" title="ເປີດບັນຊີໃຊ້ງານ" onClick={() => updateUserStatus(user.id, "ACTIVE")} type="button"><BadgeCheck size={15} /></button>
                       ) : (
-                        <button className="btn danger" onClick={() => updateUserStatus(user.id, "SUSPENDED")} type="button"><Ban size={14} /> ປິດ</button>
+                        <button className="icon-btn danger" title="ປິດບັນຊີ" onClick={() => updateUserStatus(user.id, "SUSPENDED")} type="button"><Ban size={15} /></button>
                       )}
-                      <button className="btn danger" onClick={() => deleteUser(user.id)} type="button"><Trash2 size={14} /> Delete</button>
+                      <button className="icon-btn danger" title="ລຶບບັນຊີ" onClick={() => deleteUser(user.id)} type="button"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1380,8 +1403,8 @@ export function AdminDashboard() {
                     <strong className={driver.walletLowBalance ? "danger-text" : ""}>{formatLak(driver.walletBalanceLak ?? 0)}</strong>
                     {driver.walletLowBalance ? <span className="muted-block">ເງິນໃກ້ໝົດ</span> : null}
                     <div className="table-actions mini-actions">
-                      <button className="btn" onClick={() => adjustDriverWallet(driver, "CREDIT")} type="button"><Plus size={14} /> ເຕີມ</button>
-                      <button className="btn danger" onClick={() => adjustDriverWallet(driver, "DEBIT")} type="button"><Banknote size={14} /> ຫັກ</button>
+                      <button className="icon-btn primary" title="ເຕີມເງິນ Wallet" onClick={() => adjustDriverWallet(driver, "CREDIT")} type="button"><Plus size={15} /></button>
+                      <button className="icon-btn danger" title="ຫັກເງິນ Wallet" onClick={() => adjustDriverWallet(driver, "DEBIT")} type="button"><Banknote size={15} /></button>
                     </div>
                   </td>
                   <td>
@@ -1392,10 +1415,11 @@ export function AdminDashboard() {
                     </div>
                   </td>
                   <td className="table-actions">
-                    <button className="btn" onClick={() => editDriver(driver)} type="button"><Edit size={16} /> ແກ້</button>
-                    <button className="btn btn-primary" onClick={() => updateDriver(driver.id, "verify")} type="button"><BadgeCheck size={16} /> ອະນຸມັດ</button>
-                    <button className="btn" onClick={() => updateDriver(driver.id, "premium")} type="button"><Crown size={16} /> Premium</button>
-                    <button className="btn danger" onClick={() => disableDriver(driver.id)} type="button"><Ban size={16} /> ບລັອກ</button>
+                    <button className="icon-btn" title="ແກ້ໄຂຄົນຂັບ" onClick={() => editDriver(driver)} type="button"><Edit size={15} /></button>
+                    <button className="icon-btn ok" title="ອະນຸມັດ/ຍົກເລີກການຢືນຢັນ" onClick={() => updateDriver(driver.id, "verify")} type="button"><BadgeCheck size={15} /></button>
+                    <button className="icon-btn primary" title="ສະລັບສະຖານະ Premium" onClick={() => updateDriver(driver.id, "premium")} type="button"><Crown size={15} /></button>
+                    <button className="icon-btn danger" title="ບລັອກ/ປົດບລັອກ" onClick={() => disableDriver(driver.id)} type="button"><Ban size={15} /></button>
+                    <button className="icon-btn danger" title="ລຶບຄົນຂັບ" onClick={() => deleteDriver(driver)} type="button"><Trash2 size={15} /></button>
                   </td>
                 </tr>
               ))}
@@ -1486,8 +1510,8 @@ export function AdminDashboard() {
                   <td>{tour.sortOrder ?? 0}</td>
                   <td>{tour.active === false ? "ປິດ" : "ເປີດ"}</td>
                   <td className="table-actions">
-                    <button className="btn" onClick={() => editTour(tour)} type="button"><Edit size={16} /> ແກ້</button>
-                    <button className="btn danger" onClick={() => disableTour(tour.id)} type="button"><Trash2 size={16} /> ປິດ</button>
+                    <button className="icon-btn" title="ແກ້ໄຂທົວ" onClick={() => editTour(tour)} type="button"><Edit size={15} /></button>
+                    <button className="icon-btn danger" title="ປິດ/ລຶບທົວ" onClick={() => disableTour(tour.id)} type="button"><Trash2 size={15} /></button>
                   </td>
                 </tr>
               ))}
@@ -1577,10 +1601,10 @@ export function AdminDashboard() {
                     </select>
                   </td>
                   <td className="table-actions">
-                    <button className="btn" onClick={() => editBooking(booking)} type="button"><Edit size={16} /> ແກ້</button>
-                    <button className="btn danger" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={16} /> Delete</button>
+                    <button className="icon-btn" title="ແກ້ໄຂການຈອງ" onClick={() => editBooking(booking)} type="button"><Edit size={15} /></button>
+                    <button className="icon-btn danger" title="ລຶບການຈອງ" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={15} /></button>
                     {!["COMPLETED", "CANCELLED"].includes(booking.status) ? (
-                      <button className="btn danger" onClick={() => cancelBooking(booking.id)} type="button"><Ban size={16} /> Cancel</button>
+                      <button className="icon-btn danger" title="ຍົກເລີກການຈອງ" onClick={() => cancelBooking(booking.id)} type="button"><Ban size={15} /></button>
                     ) : null}
                   </td>
                 </tr>
@@ -1605,7 +1629,7 @@ export function AdminDashboard() {
                 <tr key={booking.id}>
                   <td>{booking.id.slice(0, 8)}</td><td>{booking.customerName ?? "-"}</td><td>{booking.customerWhatsapp || booking.customerPhone || "-"}</td><td>{booking.driverName || "-"}</td><td>{booking.pickup} ? {booking.dropoff}</td><td>{formatLak(booking.estimatedPriceLak)}</td>
                   <td><select className="status-select" value={booking.status} onChange={(event) => updateBooking(booking.id, { status: event.target.value })}>{bookingStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></td>
-                  <td className="table-actions"><button className="btn" onClick={() => editBooking(booking)} type="button"><Edit size={16} /> Edit</button><button className="btn danger" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={16} /> Delete</button></td>
+                  <td className="table-actions"><button className="icon-btn" title="ແກ້ໄຂອໍເດີ້" onClick={() => editBooking(booking)} type="button"><Edit size={15} /></button><button className="icon-btn danger" title="ລຶບອໍເດີ້" onClick={() => deleteBooking(booking.id)} type="button"><Trash2 size={15} /></button></td>
                 </tr>
               )) : <tr><td colSpan={8}>No order history</td></tr>}
             </tbody>

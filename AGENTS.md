@@ -131,6 +131,8 @@ cd /var/www/taxilao
 bash scripts/deploy-production.sh
 ```
 
+Production deployment has been verified working on the VPS with `bash scripts/deploy-production.sh`. Treat this as the preferred one-command deploy path after local changes are committed and pushed to GitHub.
+
 The script pulls `origin/main`, runs `npm install`, verifies `apps/api/app.js`,
 builds API/Web/Admin, restarts `taxilao-api`, `taxilao-web`, and `taxilao-admin`
 with PM2, saves PM2, then smoke-tests `https://api.taxilao.com/health`,
@@ -395,6 +397,7 @@ Admin:
 - `DELETE /admin/users/:id`
 - `GET|POST /admin/drivers`
 - `PATCH|DELETE /admin/drivers/:id`
+- `DELETE /admin/drivers/:id/hard-delete`
 - `GET|POST /admin/drivers/:id/wallet`
 - `GET|PATCH /admin/pricing`
 - `GET|POST /admin/vehicle-categories`
@@ -516,6 +519,7 @@ Driver APK behavior:
 - Creating any booking requires an authenticated `USER` member. Web booking forms are
   wrapped in `MemberAuthGate`; Google OAuth signs and preserves a safe relative
   `returnTo` path so users return to the exact taxi/driver/tour booking URL.
+- Admin driver delete has two meanings: `DELETE /admin/drivers/:id` is a soft disable/block action that keeps history; `DELETE /admin/drivers/:id/hard-delete` permanently removes the driver record and is blocked if that driver has `PENDING`, `OFFERED`, `CONFIRMED`, `ON_THE_WAY`, or `IN_PROGRESS` orders. Keep historical bookings/ledger intact unless the user explicitly requests a deeper data purge.
 - Admin booking management separates active bookings from order history. Active
   bookings are `PENDING`, `OFFERED`, `CONFIRMED`, `ON_THE_WAY`, and `IN_PROGRESS`.
   Order history is `COMPLETED` and `CANCELLED`. Admin can cancel/update orders and

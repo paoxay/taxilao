@@ -1450,7 +1450,7 @@ async function autoDispatchBooking(bookingId) {
   const activeDriverIds = await db.collection("bookings")
     .distinct("driverId", {
       driverId: { $ne: null },
-      status: { $in: ["OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"] }
+      status: { $in: ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"] }
     });
   const attemptedDriverIds = Array.isArray(booking.dispatchAttemptedDriverIds) ? booking.dispatchAttemptedDriverIds : [];
   const pricing = await getPricingSettings();
@@ -3297,6 +3297,35 @@ app.delete("/admin/drivers/:id", requireAdmin, async (req, res, next) => {
     });
 
     res.json(publicDriver(driver));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/admin/drivers/:id/hard-delete", requireAdmin, async (req, res, next) => {
+  try {
+    const driver = await db.collection("drivers").findOne({ id: req.params.id });
+    if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+    const activeBookings = await db.collection("bookings").countDocuments({
+      driverId: driver.id,
+      status: { $in: ["OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"] }
+    });
+    if (activeBookings > 0) {
+      return res.status(409).json({ message: "Driver has active orders. Cancel or complete active orders before deleting." });
+    }
+
+    const result = await db.collection("drivers").deleteOne({ id: driver.id });
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "DRIVER_DELETED",
+      targetId: driver.id,
+      actorId: req.user.id,
+      metadata: { driverName: driver.name, username: driver.username || null },
+      createdAt: new Date()
+    });
+
+    res.json({ ok: true, deletedCount: result.deletedCount, id: driver.id });
   } catch (error) {
     next(error);
   }
