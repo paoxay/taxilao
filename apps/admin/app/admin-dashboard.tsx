@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { BadgeCheck, Ban, Banknote, CalendarDays, Car, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, ShieldAlert, Trash2, UserRound, UsersRound, X } from "lucide-react";
+import { BadgeCheck, Ban, Banknote, CalendarDays, Car, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, ShieldAlert, Star, Trash2, UserRound, UsersRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { getApiUrl } from "./config";
 
@@ -35,6 +35,8 @@ type Driver = {
   walletBalanceLak?: number;
   walletLowBalanceWarningLak?: number;
   walletLowBalance?: boolean;
+  rating?: number;
+  reviewCount?: number;
 };
 
 type Tour = {
@@ -600,6 +602,30 @@ export function AdminDashboard() {
       await loadData();
     } catch (error) {
       setMessage(error instanceof Error ? `ອັບເດດບໍ່ສຳເລັດ: ${error.message}` : "ອັບເດດບໍ່ສຳເລັດ");
+    }
+  }
+
+  async function adjustDriverRating(driver: Driver) {
+    const current = Number(driver.rating ?? 5).toFixed(1);
+    const ratingInput = window.prompt("Driver rating 1-5", current);
+    if (ratingInput === null) return;
+    const rating = Number(ratingInput);
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      setMessage("Rating must be between 1 and 5");
+      return;
+    }
+    const comment = window.prompt("Rating note", "Admin rating adjustment") || "Admin rating adjustment";
+    try {
+      const response = await fetch(`${apiUrl}/admin/drivers/${driver.id}/rating`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ rating, comment })
+      });
+      await readJson(response, null, "adjust driver rating");
+      await loadData();
+      setMessage(`Updated rating for ${driver.name}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Update rating failed: ${error.message}` : "Update rating failed");
     }
   }
 
@@ -1372,6 +1398,7 @@ export function AdminDashboard() {
                 <th>ລົດ</th>
                 <th>ລາຄາ</th>
                 <th>Wallet</th>
+                <th>Rating</th>
                 <th>ສະຖານະ</th>
                 <th>ຈັດການ</th>
               </tr>
@@ -1405,6 +1432,13 @@ export function AdminDashboard() {
                     <div className="table-actions mini-actions">
                       <button className="icon-btn primary" title="ເຕີມເງິນ Wallet" onClick={() => adjustDriverWallet(driver, "CREDIT")} type="button"><Plus size={15} /></button>
                       <button className="icon-btn danger" title="ຫັກເງິນ Wallet" onClick={() => adjustDriverWallet(driver, "DEBIT")} type="button"><Banknote size={15} /></button>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="rating-cell">
+                      <strong><Star size={15} /> {Number(driver.rating ?? 5).toFixed(1)}</strong>
+                      <span>{driver.reviewCount ?? 0} reviews</span>
+                      <button className="icon-btn primary" title="Adjust driver rating" onClick={() => adjustDriverRating(driver)} type="button"><Star size={15} /></button>
                     </div>
                   </td>
                   <td>

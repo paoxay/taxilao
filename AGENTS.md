@@ -577,6 +577,9 @@ Driver APK behavior:
 - Admin can delete `USER` member accounts. Deletion is blocked while the member has
   active bookings unless a future force-delete workflow is intentionally used.
 - When a live ride reaches `COMPLETED`, the customer tracker prompts once to rate the assigned driver using `POST /bookings/:id/review`. This updates `drivers.rating` and `drivers.reviewCount` through the API review aggregation. A completed booking that still needs `driverReview` must remain eligible for the live tracker and must not be dismissed/cleared automatically before the customer rates or closes it.
+- Rating model: driver and customer scores are capped at 5.0 and start at 5.0 before real reviews. Review aggregation uses a weighted average with `RATING_START_VALUE = 5` and `RATING_BASE_WEIGHT = 3`, so early accounts begin trusted but 1-star/low-star reviews still pull the rating down over time. Do not change this into additive scoring; `reviewCount` is the only value that should increment per review.
+- Admin can adjust a driver rating with `PATCH /admin/drivers/:id/rating`. This writes/upserts one `reviews` document with `fromRole: "ADMIN"` and `adminManual: true`, then calls the same driver rating aggregation. Do not directly overwrite `drivers.rating` for manual edits.
+- Driver APK history/details parse `booking.driverReview` so drivers can see the stars/comment left by the customer after a completed ride. Keep this read-only in the driver app; customers submit it through `POST /bookings/:id/review`.
 - After a taxi request is created, the live tracker is the primary customer surface.
   It hides the close action until the booking is completed or cancelled, warns on
   browser unload while active, blocks browser back while active, and allows customer

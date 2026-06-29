@@ -1087,17 +1087,30 @@ function normalizeReviewInput(rating, comment) {
   return { rating: Math.round(numericRating), comment: cleanComment };
 }
 
+const RATING_START_VALUE = 5;
+const RATING_BASE_WEIGHT = 3;
+
+function weightedRatingFromStats(stats) {
+  const count = Number(stats?.count || 0);
+  if (!count) return { rating: RATING_START_VALUE, count: 0 };
+  const total = Number(stats?.total || 0);
+  const weighted = ((RATING_START_VALUE * RATING_BASE_WEIGHT) + total) / (RATING_BASE_WEIGHT + count);
+  const rating = Math.max(1, Math.min(RATING_START_VALUE, weighted));
+  return { rating: Number(rating.toFixed(2)), count };
+}
+
 async function refreshDriverRating(driverId) {
   const stats = await db.collection("reviews").aggregate([
     { $match: { driverId, targetType: "DRIVER", hidden: { $ne: true } } },
-    { $group: { _id: "$driverId", average: { $avg: "$rating" }, count: { $sum: 1 } } }
+    { $group: { _id: "$driverId", total: { $sum: "$rating" }, count: { $sum: 1 } } }
   ]).next();
+  const score = weightedRatingFromStats(stats);
   await db.collection("drivers").updateOne(
     { id: driverId },
     {
       $set: {
-        rating: Number((stats?.average || 0).toFixed(2)),
-        reviewCount: Number(stats?.count || 0),
+        rating: score.rating,
+        reviewCount: score.count,
         updatedAt: new Date()
       }
     }
@@ -1107,14 +1120,15 @@ async function refreshDriverRating(driverId) {
 async function refreshCustomerRating(userId) {
   const stats = await db.collection("reviews").aggregate([
     { $match: { userId, targetType: "CUSTOMER", hidden: { $ne: true } } },
-    { $group: { _id: "$userId", average: { $avg: "$rating" }, count: { $sum: 1 } } }
+    { $group: { _id: "$userId", total: { $sum: "$rating" }, count: { $sum: 1 } } }
   ]).next();
+  const score = weightedRatingFromStats(stats);
   await db.collection("users").updateOne(
     { id: userId },
     {
       $set: {
-        customerRating: Number((stats?.average || 5).toFixed(2)),
-        customerReviewCount: Number(stats?.count || 0),
+        customerRating: score.rating,
+        customerReviewCount: score.count,
         updatedAt: new Date()
       }
     }
@@ -1307,14 +1321,19 @@ async function seedIfEmpty() {
 function publicDriver(driver) {
   const walletBalanceLak = Number(driver.walletBalanceLak || 0);
   const lowBalanceWarningLak = Number(driver.walletLowBalanceWarningLak ?? defaultDriverLowBalanceWarningLak);
+  const reviewCount = Number(driver.reviewCount || 0);
+  const rawRating = Number(driver.rating);
+  const rating = reviewCount > 0 && Number.isFinite(rawRating)
+    ? Math.max(1, Math.min(RATING_START_VALUE, rawRating))
+    : RATING_START_VALUE;
   return {
     id: driver.id,
     name: driver.name,
     city: driver.city,
     languages: driver.languages || [],
     vehicleType: driver.vehicleType || "Premium Vehicle",
-    rating: Number(driver.rating || 0),
-    reviewCount: Number(driver.reviewCount || 0),
+    rating,
+    reviewCount,
     startingPriceLak: Number(driver.startingPriceLak || 50000),
     ratePerKmLak: driver.ratePerKmLak !== undefined ? Number(driver.ratePerKmLak) : null,
     minimumFareLak: driver.minimumFareLak !== undefined ? Number(driver.minimumFareLak) : null,
@@ -2215,7 +2234,7 @@ app.post("/drivers/apply", bookingLimiter, async (req, res, next) => {
       city,
       languages,
       vehicleType,
-      rating: 0,
+      rating: RATING_START_VALUE,
       reviewCount: 0,
       startingPriceLak: 50000,
       verified: false,
@@ -3165,6 +3184,63 @@ app.get("/admin/drivers", requireAdmin, async (_req, res, next) => {
   }
 });
 
+app.patch("/admin/drivers/:id/rating", requireAdmin, async (req, res, next) => {
+  try {
+    const driver = await db.collection("drivers").findOne({ id: req.params.id });
+    if (!driver) return res.status(404).json({ message: "Driver not found" });
+
+    const { rating, comment } = normalizeReviewInput(
+      req.body.rating,
+      req.body.comment || "Admin rating adjustment"
+    );
+    const now = new Date();
+    const existing = await db.collection("reviews").findOne({
+      driverId: driver.id,
+      targetType: "DRIVER",
+      fromRole: "ADMIN",
+      adminManual: true
+    });
+    const reviewId = existing?.id || randomUUID();
+
+    await db.collection("reviews").updateOne(
+      { id: reviewId },
+      {
+        $set: {
+          driverId: driver.id,
+          targetType: "DRIVER",
+          fromRole: "ADMIN",
+          fromName: req.user.name || "TAXILAO Admin",
+          rating,
+          comment,
+          hidden: false,
+          adminManual: true,
+          updatedAt: now
+        },
+        $setOnInsert: {
+          id: reviewId,
+          createdAt: now
+        }
+      },
+      { upsert: true }
+    );
+
+    await refreshDriverRating(driver.id);
+    const updatedDriver = await db.collection("drivers").findOne({ id: driver.id });
+    await db.collection("adminLogs").insertOne({
+      id: randomUUID(),
+      action: "DRIVER_RATING_UPDATED",
+      targetId: driver.id,
+      actorId: req.user.id,
+      metadata: { rating, comment, driverName: driver.name },
+      createdAt: now
+    });
+
+    res.json(publicDriver(updatedDriver));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/admin/drivers/:id/wallet", requireAdmin, async (req, res, next) => {
   try {
     const driver = await db.collection("drivers").findOne({ id: req.params.id });
@@ -3406,7 +3482,7 @@ app.post("/admin/drivers", requireAdmin, async (req, res, next) => {
       city,
       languages: Array.isArray(languages) ? languages : [],
       vehicleType,
-      rating: 0,
+      rating: RATING_START_VALUE,
       reviewCount: 0,
       startingPriceLak: Number(startingPriceLak || 50000),
       ratePerKmLak: ratePerKmLak ? Number(ratePerKmLak) : null,

@@ -406,6 +406,22 @@ h1, h2, h3, .btn, .badge { letter-spacing: 0; }
 .driver-cell strong { display: block; overflow-wrap: anywhere; }
 .driver-cell span { display: block; color: var(--muted); font-size: 12px; }
 
+.rating-cell {
+  display: grid;
+  gap: 5px;
+  min-width: 92px;
+}
+.rating-cell strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-weight: 900;
+}
+.rating-cell strong svg { color: var(--gold); fill: rgba(221, 166, 65, 0.22); }
+.rating-cell span { color: var(--muted); font-size: 12px; }
+.rating-cell .icon-btn { width: 32px; height: 32px; }
+
 .muted-block { display: block; color: var(--muted); font-size: 12px; }
 
 .driver-avatar {

@@ -5405,7 +5405,8 @@ textarea:focus {
 
 .phone-input-wrap {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  min-height: 52px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
@@ -5445,7 +5446,11 @@ textarea:focus {
   background: transparent;
   box-shadow: none !important;
   flex: 1;
+  min-width: 0;
   padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .phone-input-wrap input:focus {
   box-shadow: none !important;
