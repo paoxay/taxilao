@@ -1038,7 +1038,7 @@ function saveImageDataUrl(value, req, folder) {
   const filename = `${Date.now()}-${randomUUID()}.${extension}`;
   fs.writeFileSync(path.join(folderPath, filename), buffer);
 
-  return `${getPublicApiOrigin(req)}/uploads/${folder}/${filename}`;
+  return `/uploads/${folder}/${filename}`;
 }
 
 function saveImageFields(req, fields, folder) {

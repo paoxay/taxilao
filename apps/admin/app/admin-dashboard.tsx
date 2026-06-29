@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { BadgeCheck, Ban, Banknote, CalendarDays, Car, Crown, Edit, Image, LogOut, Plus, RefreshCcw, Save, Settings, ShieldAlert, Star, Trash2, UserRound, UsersRound, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
-import { getApiUrl } from "./config";
+import { getApiUrl, resolveMedia } from "./config";
 
 const AdminPlaceManager = dynamic(
   () => import("./admin-place-manager").then((module) => module.AdminPlaceManager),
@@ -1409,7 +1409,7 @@ export function AdminDashboard() {
                   <td>
                     <div className="driver-cell">
                       {driver.portraitUrl || driver.vehicleUrl || driver.coverUrl ? (
-                        <img className="driver-avatar" src={driver.portraitUrl || driver.vehicleUrl || driver.coverUrl} alt={driver.name} />
+                        <img className="driver-avatar" src={resolveMedia(driver.portraitUrl || driver.vehicleUrl || driver.coverUrl)} alt={driver.name} />
                       ) : (
                         <span className="driver-avatar placeholder">TL</span>
                       )}
@@ -1534,7 +1534,7 @@ export function AdminDashboard() {
             <tbody>
               {tours.map((tour) => (
                 <tr key={tour.id}>
-                  <td>{tour.imageUrl ? <img className="admin-thumb" src={tour.imageUrl} alt={tour.title} /> : <Image size={22} />}</td>
+                  <td>{tour.imageUrl ? <img className="admin-thumb" src={resolveMedia(tour.imageUrl)} alt={tour.title} /> : <Image size={22} />}</td>
                   <td>{tour.title}</td>
                   <td>{tour.city}</td>
                   <td>{tour.duration}</td>

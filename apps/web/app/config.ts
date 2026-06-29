@@ -7,3 +7,16 @@ export function getApiUrl() {
 
   return (configuredUrl || "http://localhost:4000").replace(/\/$/, "");
 }
+
+// Rewrite any API-served media URL (relative "/uploads/..." OR an absolute host
+// URL like http://localhost:4000/uploads/... / https://api.taxilao.com/uploads/...)
+// to use the API host this frontend is actually configured to talk to.
+// Keeps data: URLs and external URLs (e.g. Unsplash) untouched.
+export function resolveMedia(url?: string | null): string {
+  if (!url) return "";
+  const value = String(url);
+  if (value.startsWith("data:")) return value;
+  const idx = value.indexOf("/uploads/");
+  if (idx >= 0) return `${getApiUrl()}${value.slice(idx)}`;
+  return value;
+}

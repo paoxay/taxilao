@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { CarFront, Check, CircleDot, Clock3, MapPin, Navigation, Route, ShieldCheck, Star, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { useUiCopy } from "./use-ui-copy";
+import { resolveMedia } from "./config";
 import { FloatingChat } from "./floating-chat";
 
 const RideLiveMap = dynamic(() => import("./ride-live-map").then((module) => module.RideLiveMap), { ssr: false });
@@ -392,7 +393,7 @@ export function RideLiveTracker({
         {booking.driver ? (
           <article className="ride-driver-card">
             <div className="ride-driver-photo">
-              {booking.driver.portraitUrl ? <img src={booking.driver.portraitUrl} alt={booking.driver.name} /> : <CarFront size={24} />}
+              {booking.driver.portraitUrl ? <img src={resolveMedia(booking.driver.portraitUrl)} alt={booking.driver.name} /> : <CarFront size={24} />}
             </div>
             <div>
               <span>{copy.driver}</span>

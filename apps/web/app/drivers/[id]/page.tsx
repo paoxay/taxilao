@@ -5,6 +5,7 @@ import { formatLak, getLocale } from "@taxilao/shared";
 import { Nav } from "../../components";
 import { getDriver } from "../../api";
 import { getUiCopy } from "../../ui-copy";
+import { resolveMedia } from "../../config";
 
 export default async function DriverProfilePage({ params, searchParams }: { params: { id: string }; searchParams?: { lang?: string } }) {
   const locale = getLocale(searchParams?.lang);
@@ -22,11 +23,11 @@ export default async function DriverProfilePage({ params, searchParams }: { para
     <main className="shell">
       <Nav locale={locale} />
       <section className="section">
-        {driver.coverUrl ? <img className="driver-cover" src={driver.coverUrl} alt={`${driver.name} cover`} /> : null}
+        {driver.coverUrl ? <img className="driver-cover" src={resolveMedia(driver.coverUrl)} alt={`${driver.name} cover`} /> : null}
         <div className="profile">
           <div className="panel" style={{ padding: 16, borderRadius: 8 }}>
-            <img className="profile-photo" src={driver.portraitUrl ?? "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=85"} alt={driver.name} />
-            <img className="profile-photo" style={{ marginTop: 14 }} src={driver.vehicleUrl ?? "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85"} alt={driver.vehicleType} />
+            <img className="profile-photo" src={resolveMedia(driver.portraitUrl) || "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=85"} alt={driver.name} />
+            <img className="profile-photo" style={{ marginTop: 14 }} src={resolveMedia(driver.vehicleUrl) || "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85"} alt={driver.vehicleType} />
           </div>
           <div>
             <div className="meta" style={{ marginBottom: 12 }}>

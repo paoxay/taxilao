@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BadgeCheck, CarFront, ChevronDown, Compass, Crown, Home, Languages, Menu, Star } from "lucide-react";
 import { Driver, Locale, TourPackage, formatLak, homepageCopy, i18n } from "@taxilao/shared";
+import { resolveMedia } from "./config";
 import { MemberProfileMenu } from "./member-profile-menu";
 import { useUiCopy } from "./use-ui-copy";
 
@@ -125,7 +126,7 @@ export function DriverCard({ driver }: { driver: Driver }) {
   const { copy } = useUiCopy();
   return (
         <Link className="card" href={`/drivers/${driver.id}`}>
-      <img src={driver.vehicleUrl ?? "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85"} alt={`${driver.vehicleType} in ${driver.city}`} />
+      <img src={resolveMedia(driver.vehicleUrl) || "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85"} alt={`${driver.vehicleType} in ${driver.city}`} />
       <div className="card-body">
         <div className="meta" style={{ marginBottom: 10 }}>
           {driver.premium ? (
@@ -157,7 +158,7 @@ export function TourCard({ tour, driverName }: { tour: TourPackage; driverName: 
   const { copy } = useUiCopy();
   return (
     <article className="card">
-      <img src={tour.imageUrl ?? "https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&w=1200&q=85"} alt={tour.title} />
+      <img src={resolveMedia(tour.imageUrl) || "https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&w=1200&q=85"} alt={tour.title} />
       <div className="card-body">
         <div className="meta">
           <span>{tour.city}</span>

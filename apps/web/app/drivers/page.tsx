@@ -4,6 +4,7 @@ import { Nav } from "../components";
 import { getDrivers } from "../api";
 import { formatLak, getLocale } from "@taxilao/shared";
 import { getUiCopy } from "../ui-copy";
+import { resolveMedia } from "../config";
 
 export default async function DriversPage({
   searchParams
@@ -109,7 +110,7 @@ function DriverOrderRow({ driver, index, locale }: { driver: any; index: number;
   const copy = getUiCopy(locale);
   const routes = Array.isArray(driver.routes) ? driver.routes.slice(0, 2) : [];
   const languages = Array.isArray(driver.languages) ? driver.languages.slice(0, 3) : [];
-  const imageUrl = driver.vehicleUrl ?? "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85";
+  const imageUrl = resolveMedia(driver.vehicleUrl) || "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=1200&q=85";
 
   return (
     <article className={driver.premium ? "driver-order premium" : "driver-order"}>

@@ -7,3 +7,14 @@ export function getApiUrl() {
 
   return (configuredUrl || "http://localhost:4000").replace(/\/$/, "");
 }
+
+// Rewrite any API-served media URL (relative or any host) to the API host this
+// admin is configured to talk to. Keeps data: and external URLs untouched.
+export function resolveMedia(url?: string | null): string {
+  if (!url) return "";
+  const value = String(url);
+  if (value.startsWith("data:")) return value;
+  const idx = value.indexOf("/uploads/");
+  if (idx >= 0) return `${getApiUrl()}${value.slice(idx)}`;
+  return value;
+}

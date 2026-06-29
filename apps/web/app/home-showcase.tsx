@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, Car, ChevronLeft, ChevronRight, Crown, Languages, MapPin, Star } from "lucide-react";
 import { formatLak, Locale } from "@taxilao/shared";
 import { getUiCopy } from "./ui-copy";
+import { resolveMedia } from "./config";
 
 type HomeDriver = {
   id: string;
@@ -40,7 +41,7 @@ export function HomeDriverList({ drivers, locale }: { drivers: HomeDriver[]; loc
       {drivers.slice(0, 6).map((driver, index) => (
         <article className={driver.premium ? "home-driver-row premium" : "home-driver-row"} key={driver.id}>
           <span className="home-driver-rank">{String(index + 1).padStart(2, "0")}</span>
-          <img src={driver.vehicleUrl || "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=640&q=82"} alt={driver.vehicleType} />
+          <img src={resolveMedia(driver.vehicleUrl) || "https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2?auto=format&fit=crop&w=640&q=82"} alt={driver.vehicleType} />
           <div className="home-driver-main">
             <div className="home-driver-name">
               <h3>{driver.name}</h3>
@@ -93,7 +94,7 @@ export function TourBannerCarousel({ tours, locale }: { tours: HomeTour[]; local
 
   return (
     <section className="tour-banner" aria-label={copy.tourPackages}>
-      <img src={tour.imageUrl || "https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&w=1800&q=88"} alt={tour.title} />
+      <img src={resolveMedia(tour.imageUrl) || "https://images.unsplash.com/photo-1528181304800-259b08848526?auto=format&fit=crop&w=1800&q=88"} alt={tour.title} />
       <div className="tour-banner-shade" />
       <div className="tour-banner-content">
         <p className="eyebrow">{copy.tourPackages} · {tour.city}</p>
