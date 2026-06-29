@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, BookOpen, CalendarDays, CheckCircle2, Copy, Gauge, IdCard, LogOut, Mail, MapPin, Route, ShieldCheck, UserRound } from "lucide-react";
+import { BadgeCheck, BookOpen, CalendarDays, CheckCircle2, Copy, Gauge, IdCard, LogOut, Mail, MapPin, Phone, Route, ShieldCheck, UserRound } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { Nav } from "../components";
 import { getApiUrl } from "../config";
@@ -11,6 +11,7 @@ type Member = {
   id: string;
   email: string;
   name: string;
+  phone?: string;
   avatarUrl?: string;
   role: string;
   status?: string;
@@ -102,7 +103,11 @@ export default function ProfilePage() {
         <div className="profile-heading">
           <p className="eyebrow">TAXILAO MEMBER</p>
           <h1>{member.name}</h1>
-          <div><span><Mail size={15} /> {member.email}</span><span><ShieldCheck size={15} /> {copy.accountVerified}</span></div>
+          <div>
+            {member.phone ? <span><Phone size={15} /> +856 {member.phone}</span> : null}
+            {member.email ? <span><Mail size={15} /> {member.email}</span> : null}
+            <span><ShieldCheck size={15} /> {copy.accountVerified}</span>
+          </div>
         </div>
         <button className="btn profile-logout" onClick={logout} type="button"><LogOut size={17} /> {copy.logout}</button>
       </section>
@@ -129,8 +134,9 @@ export default function ProfilePage() {
                 <div className="profile-panel-head"><div><p className="eyebrow">ACCOUNT</p><h2>{copy.accountInfo}</h2></div><span className="account-status"><CheckCircle2 size={15} /> {copy.active}</span></div>
                 <dl className="profile-details">
                   <div><dt>{copy.customerName}</dt><dd>{member.name}</dd></div>
-                  <div><dt>Email</dt><dd>{member.email}</dd></div>
-                  <div><dt>{copy.loginMethod}</dt><dd>Google</dd></div>
+                  <div><dt>ເບີໂທ</dt><dd>{member.phone ? `+856 ${member.phone}` : "—"}</dd></div>
+                  <div><dt>Email</dt><dd>{member.email || "—"}</dd></div>
+                  <div><dt>{copy.loginMethod}</dt><dd>{member.provider === "phone" ? "Phone + OTP" : "Google"}</dd></div>
                   <div><dt>{copy.joined}</dt><dd>{member.createdAt ? new Date(member.createdAt).toLocaleDateString() : "TAXILAO"}</dd></div>
                 </dl>
               </article>

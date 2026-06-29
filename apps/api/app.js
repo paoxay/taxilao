@@ -4,7 +4,7 @@ const dns = require("dns");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 require("dotenv").config();
 
-const { randomUUID, scryptSync, timingSafeEqual } = require("crypto");
+const { randomUUID, scryptSync, timingSafeEqual, createHmac } = require("crypto");
 const cors = require("cors");
 const express = require("express");
 const rateLimit = require("express-rate-limit");
@@ -32,6 +32,10 @@ const mapboxConfigured =
 const googleOAuthConfigured =
   Boolean(googleClientId && googleClientSecret) &&
   !/your[-_ ]google|example|changeme|<[^>]+>/i.test(`${googleClientId} ${googleClientSecret}`);
+const lctSmsUrl = process.env.LCT_SMS_URL || "";
+const lctSmsHeader = process.env.LTC_SMS_HEADER || "TAXILAO";
+const lctSmsKey = process.env.LCT_SMS_KEY || "";
+const lctSmsConfigured = Boolean(lctSmsUrl && lctSmsKey);
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/taxilao";
 const mongoDbName = process.env.MONGODB_DB || "taxilao";
 const uploadDir = path.resolve(__dirname, "uploads");
@@ -859,6 +863,8 @@ async function requireActiveMember(req, res, next) {
     role: user.role || "USER",
     status: user.status || "ACTIVE",
     provider: user.provider || "google",
+    phone: user.phone || "",
+    phoneVerified: Boolean(user.phoneVerified),
     customerRating: Number(user.customerRating || 5),
     customerReviewCount: Number(user.customerReviewCount || 0),
     completedTrips: Number(user.completedTrips || user.completedBookings || 0),
@@ -876,6 +882,51 @@ function signMemberTokens(user) {
     accessToken: jwt.sign(payload, accessSecret, { expiresIn: "15m" }),
     refreshToken: jwt.sign({ id: user.id, role: user.role }, refreshSecret, { expiresIn: "30d" })
   };
+}
+
+// ─── Phone OTP auth (Lao Telecom SMS gateway) ────────────────────────────────
+const otpStore = new Map(); // normalizedPhone -> { hash, expiresAt, attempts, resendAt }
+const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_RESEND_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const otpRequestLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
+
+function normalizeLaoPhone(raw) {
+  let digits = String(raw || "").replace(/[^\d]/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("856")) digits = digits.slice(3);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (!/^[23]\d{7,9}$/.test(digits)) return null;
+  return digits;
+}
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function hashOtp(code, phone) {
+  return createHmac("sha256", accessSecret).update(`${phone}:${code}`).digest("hex");
+}
+
+async function sendLctSms(phone, message) {
+  const e164 = `856${phone}`;
+  if (!lctSmsConfigured) {
+    console.log(`[OTP dev mode] To ${e164}: ${message}`);
+    return { sent: false, dev: true };
+  }
+  const transactionId = `${Date.now()}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
+  const response = await fetch(lctSmsUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Apikey: lctSmsKey },
+    body: JSON.stringify({
+      transaction_id: transactionId,
+      header: lctSmsHeader,
+      phoneNumber: e164,
+      message
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  return { sent: data && data.resultDesc === "success", dev: false, data };
 }
 
 function requireAdmin(req, res, next) {
@@ -1852,6 +1903,183 @@ app.post("/auth/refresh", loginLimiter, async (req, res, next) => {
     if (error?.name === "JsonWebTokenError" || error?.name === "TokenExpiredError") {
       return res.status(401).json({ message: "Refresh token is invalid or expired" });
     }
+    return next(error);
+  }
+});
+
+// ─── Phone OTP: request code (Lao Telecom SMS) ──────────────────────────────
+app.post("/auth/phone/request-otp", otpRequestLimiter, async (req, res, next) => {
+  try {
+    const phone = normalizeLaoPhone(req.body?.phone);
+    if (!phone) return res.status(400).json({ message: "ເບີໂທບໍ່ຖືກຕ້ອງ" });
+
+    const now = Date.now();
+    const prior = otpStore.get(phone);
+    if (prior && prior.resendAt > now) {
+      const wait = Math.ceil((prior.resendAt - now) / 1000);
+      return res.status(429).json({ message: `ກະລຸນາລໍ ${wait} ວິນາທີ ກ່ອນຂໍ OTP ໃໝ່` });
+    }
+
+    const code = generateOtp();
+    const message = `TAXILAO: ລະຫັດຢືນຢັນຂອງທ່ານຄື ${code} (ໃຊ້ໄດ້ 5 ນາທີ)`;
+    const sendResult = await sendLctSms(phone, message);
+    if (sendResult.sent === false && !sendResult.dev) {
+      return res.status(502).json({ message: "ສົ່ງ SMS ບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່" });
+    }
+
+    otpStore.set(phone, {
+      hash: hashOtp(code, phone),
+      expiresAt: now + OTP_TTL_MS,
+      attempts: 0,
+      resendAt: now + OTP_RESEND_MS
+    });
+
+    return res.json({ ok: true, devOtp: sendResult.dev ? code : undefined });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─── Phone OTP: verify → sign in (existing) or allow registration (new) ──────
+app.post("/auth/phone/verify", loginLimiter, async (req, res, next) => {
+  try {
+    const phone = normalizeLaoPhone(req.body?.phone);
+    const code = String(req.body?.code || "").trim();
+    if (!phone || !/^\d{4,8}$/.test(code)) {
+      return res.status(400).json({ message: "ເບີ ຫຼື ລະຫັດ OTP ບໍ່ຖືກຕ້ອງ" });
+    }
+
+    const entry = otpStore.get(phone);
+    if (!entry) return res.status(400).json({ message: "ກະລຸນາຂໍ OTP ກ່ອນ" });
+    if (Date.now() > entry.expiresAt) {
+      otpStore.delete(phone);
+      return res.status(400).json({ message: "OTP ໝົດອາຍຸ ກະລຸນາຂໍໃໝ່" });
+    }
+    if (entry.attempts >= OTP_MAX_ATTEMPTS) {
+      otpStore.delete(phone);
+      return res.status(429).json({ message: "ປ້ອນຜິດຫຼາຍເກີນໄປ ກະລຸນາຂໍ OTP ໃໝ່" });
+    }
+
+    const expected = hashOtp(code, phone);
+    const matched =
+      expected.length === entry.hash.length &&
+      timingSafeEqual(Buffer.from(expected), Buffer.from(entry.hash));
+    if (!matched) {
+      entry.attempts += 1;
+      return res.status(400).json({ message: "ລະຫັດ OTP ບໍ່ຖືກຕ້ອງ" });
+    }
+
+    otpStore.delete(phone);
+
+    const existing = await db.collection("users").findOne({ phone });
+    if (existing && existing.role && existing.role !== "USER") {
+      return res.status(403).json({ message: "ເບີນີ້ບໍ່ສາມາດໃຊ້ສະມາຊິກໄດ້" });
+    }
+
+    if (existing) {
+      await db.collection("users").updateOne(
+        { id: existing.id },
+        { $set: { phoneVerified: true, lastLoginAt: new Date(), updatedAt: new Date() } }
+      );
+      return res.json({ user: publicUser(existing), ...signMemberTokens(existing) });
+    }
+
+    // New member: issue a short-lived registration token (no account created yet).
+    const registrationToken = jwt.sign({ phone, purpose: "register" }, accessSecret, { expiresIn: "10m" });
+    return res.json({ isNew: true, registrationToken });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─── Phone: complete registration (name, email, password) ───────────────────
+app.post("/auth/phone/register", loginLimiter, async (req, res, next) => {
+  try {
+    let payload;
+    try {
+      payload = jwt.verify(String(req.body?.registrationToken || ""), accessSecret);
+    } catch (_err) {
+      return res.status(400).json({ message: "ໂທເຄັນລົງທະບຽນໝົດອາຍຸ ກະລຸນາຂໍ OTP ໃໝ່" });
+    }
+    if (payload?.purpose !== "register" || !payload.phone) {
+      return res.status(400).json({ message: "ໂທເຄັນລົງທະບຽນບໍ່ຖືກຕ້ອງ" });
+    }
+
+    const phone = normalizeLaoPhone(payload.phone);
+    const firstName = String(req.body?.firstName || "").trim();
+    const lastName = String(req.body?.lastName || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    const name = `${firstName} ${lastName}`.trim();
+
+    if (!phone) return res.status(400).json({ message: "ເບີບໍ່ຖືກຕ້ອງ" });
+    if (!firstName) return res.status(400).json({ message: "ກະລຸນາໃສ່ຊື່" });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "ອີເມວບໍ່ຖືກຕ້ອງ" });
+    if (password.length < 6) return res.status(400).json({ message: "ລະຫັດຜ່ານຕ້ອງ 6 ຕົວຂຶ້ນ" });
+
+    const dup = await db.collection("users").findOne({
+      $or: [{ phone }, ...(email ? [{ email }] : [])]
+    });
+    if (dup && dup.role && dup.role !== "USER") {
+      return res.status(403).json({ message: "ບໍ່ສາມາດໃຊ້ຂໍ້ມູນນີ້ໄດ້" });
+    }
+    if (dup && dup.phone === phone) {
+      return res.status(409).json({ message: "ເບີນີ້ລົງທະບຽນແລ້ວ ກະລຸນາເຂົ້າລະບົບ" });
+    }
+    if (email && dup && dup.email === email) {
+      return res.status(409).json({ message: "ອີເມວນີ້ຖືກໃຊ້ແລ້ວ" });
+    }
+
+    const { passwordSalt, passwordHash } = hashPassword(password);
+    const user = {
+      id: randomUUID(),
+      phone,
+      name,
+      email,
+      passwordSalt,
+      passwordHash,
+      avatarUrl: "",
+      role: "USER",
+      provider: "phone",
+      phoneVerified: true,
+      emailVerified: false,
+      status: "ACTIVE",
+      lastLoginAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    await db.collection("users").updateOne(
+      { id: user.id },
+      { $set: user, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+
+    return res.json({ user: publicUser(user), ...signMemberTokens(user) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ─── Phone: login with phone + password ─────────────────────────────────────
+app.post("/auth/phone/login-password", loginLimiter, async (req, res, next) => {
+  try {
+    const phone = normalizeLaoPhone(req.body?.phone);
+    const password = String(req.body?.password || "");
+    if (!phone || !password) {
+      return res.status(400).json({ message: "ກະລຸນາໃສ່ເບີ ແລະ ລະຫັດຜ່ານ" });
+    }
+
+    const user = await db.collection("users").findOne({ phone, role: "USER" });
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return res.status(401).json({ message: "ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ" });
+    }
+
+    await db.collection("users").updateOne(
+      { id: user.id },
+      { $set: { lastLoginAt: new Date(), updatedAt: new Date() } }
+    );
+    return res.json({ user: publicUser(user), ...signMemberTokens(user) });
+  } catch (error) {
     return next(error);
   }
 });

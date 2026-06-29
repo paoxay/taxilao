@@ -188,6 +188,9 @@ Expected variable names:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_CALLBACK_URL`
 - `MAPBOX_ACCESS_TOKEN` (optional locally; required for managed production maps)
+- `LCT_SMS_URL` (Lao Telecom SMS gateway endpoint for phone OTP)
+- `LTC_SMS_HEADER` (SMS sender/header name, e.g. `TAXILAO`)
+- `LCT_SMS_KEY` (Lao Telecom SMS API key; secret. When unset, phone OTP runs in DEV mode)
 
 Security rules:
 
@@ -235,6 +238,27 @@ Member authentication:
 - Frontend callback stores access and refresh tokens in local storage.
 - `GET /auth/me` loads the member.
 - `POST /auth/refresh` renews member tokens.
+- Phone OTP signup/sign-in: `POST /auth/phone/request-otp` then
+  `POST /auth/phone/verify`. OTP is 6 digits, HMAC-hashed, in-memory store with
+  5-min TTL, 60s resend, max 5 attempts, rate-limited. On verify: an **existing**
+  member (matched by `phone`) is signed in; a **new** number gets a short-lived
+  `registrationToken` (10m, purpose `register`) — no account is created until the
+  profile step. New members complete via `POST /auth/phone/register`
+  (`firstName`, `lastName`, `email`, `password`), which creates the `USER`
+  (provider `phone`) with a **scrypt password hash** (`passwordSalt`/`passwordHash`,
+  same helpers as drivers) and issues tokens. Returning members can also sign in
+  with `POST /auth/phone/login-password`. SMS is sent via the Lao Telecom (LTC)
+  gateway (`apicenter.laotel.com/.../submit_sms`) configured by `LCT_SMS_URL`,
+  `LTC_SMS_HEADER`, `LCT_SMS_KEY`. Phone numbers are stored/used in **local**
+  Lao form (e.g. `2098888841`); the API normalizes `+856…`, `020…`, `856020…`
+  down to that form and only prepends `856` when calling the SMS gateway. When
+  the LTC env vars are unset, the API runs in **DEV mode**: OTP is logged to the
+  console and returned as `devOtp` so it can be tested without sending real SMS.
+  `/login` offers phone OTP first, phone+password second, and Google third. The
+  `/login` UI intentionally shows **no SMS provider branding** on the public
+  signup form (do not re-add "LAOTELECOM"/provider names there); the Google
+  button is the standard white pill with the official multicolor Google "G"
+  logo (`login/page.tsx`), styled to override the dark `.btn` glass.
 
 Admin authentication:
 
@@ -278,9 +302,15 @@ For signed-in bookings, derive the member ID from the verified token.
 Visual direction:
 
 - Premium, clean, space-efficient, modern TAXILAO interface.
-- Dark neutral base with restrained gold accents.
-- Cards use an `8px` radius or less.
-- Mobile-first and usable on narrow phones.
+- 2026 dark-neutral base with restrained gold accents and glass surfaces.
+- Design tokens live in `apps/web/app/styles.css` `:root` (2026 layer appended
+  after the legacy rules). Radii: `--radius-xs` 8px, `--radius` 14px,
+  `--radius-lg` 20px (cards), `--radius-xl` 28px. The old "8px only" rule no
+  longer applies; buttons ~14px, cards ~20px glass, badges pill.
+- Customer Web is a mobile-app-style shell: every page is wrapped by the root
+  `layout.tsx` in `.app-shell > .app-content` with a global floating bottom tab
+  bar (`BottomNav`) + profile avatar in the top header.
+- Mobile-first and usable on narrow phones. Respect `prefers-reduced-motion`.
 - Use Lucide icons where available.
 - Do not mix the customer frontend with the admin interface.
 
@@ -290,6 +320,18 @@ Current homepage:
 - Drivers sort with premium and rating priority.
 - Tour banner carousel supports automatic and manual navigation.
 - Banner content comes from Admin-managed tour data.
+
+Customer Web navigation (global mobile-app shell):
+
+- The root `layout.tsx` renders `.app-shell > .app-content` plus a global
+  `BottomNav` on every customer page; do not add a second top-level nav per page
+  (pages keep the slim top `Nav` bar with brand + language + profile + book CTA).
+- Bottom tab bar has 4 icon tabs with short labels: Home `/`, Drivers `/drivers`,
+  Tours `/tours`, and Book `/booking` (gold filled CTA pill). Active tab shows a
+  gold underline pill. `BottomNav` preserves `?lang=` and derives active state
+  from `usePathname()`.
+- Profile/account lives in the top header (`MemberProfileMenu` avatar with a gold
+  ring), not in the bottom bar.
 
 Tour Admin fields:
 
@@ -327,7 +369,8 @@ Key files:
 - `packages/shared/src/index.ts`: locale list and homepage copy.
 - `apps/web/app/ui-copy.ts`: shared UI labels.
 - `apps/web/app/use-ui-copy.ts`: client locale reader.
-- `apps/web/app/components.tsx`: language selector and navigation.
+- `apps/web/app/components.tsx`: language selector, top `Nav`, driver/tour cards,
+  and the global `BottomNav` mobile-app tab bar.
 
 Locale persistence:
 
@@ -372,6 +415,10 @@ Public/member:
 - `GET /auth/google/callback`
 - `GET /auth/me`
 - `POST /auth/refresh`
+- `POST /auth/phone/request-otp`
+- `POST /auth/phone/verify`
+- `POST /auth/phone/register`
+- `POST /auth/phone/login-password`
 - `GET /drivers`
 - `GET /drivers/:id`
 - `POST /drivers/apply`
@@ -447,6 +494,7 @@ Driver APK behavior:
   offered to the next nearest eligible driver.
 - Active job GPS is sent to `/driver/bookings/:id/location`.
 - Driver status flow is `CONFIRMED` -> `ON_THE_WAY` -> `IN_PROGRESS` -> `COMPLETED`.
+- When a driver marks an order `COMPLETED`, the driver app prompts once to rate the customer using `POST /driver/bookings/:id/review`. This updates `users.customerRating` and `users.customerReviewCount` through the API review aggregation.
 - Driver APK plays a distinct in-app sound for new pending/offered jobs and another
   sound when a job is accepted.
 - Driver APK has three distinct sounds: new order, manually accepted order, and
@@ -528,6 +576,7 @@ Driver APK behavior:
   booking update.
 - Admin can delete `USER` member accounts. Deletion is blocked while the member has
   active bookings unless a future force-delete workflow is intentionally used.
+- When a live ride reaches `COMPLETED`, the customer tracker prompts once to rate the assigned driver using `POST /bookings/:id/review`. This updates `drivers.rating` and `drivers.reviewCount` through the API review aggregation. A completed booking that still needs `driverReview` must remain eligible for the live tracker and must not be dismissed/cleared automatically before the customer rates or closes it.
 - After a taxi request is created, the live tracker is the primary customer surface.
   It hides the close action until the booking is completed or cancelled, warns on
   browser unload while active, blocks browser back while active, and allows customer
@@ -540,6 +589,16 @@ Driver APK behavior:
 - Booking chat is stored in `chatMessages`. Chat endpoints allow only the booking
   owner or assigned driver, rate-limit reads/writes, and accept text plus guarded
   image/audio data URL attachments for later media UI.
+- Customer in-trip chat is a **floating, draggable widget** (`FloatingChat`,
+  `apps/web/app/floating-chat.tsx`) rendered via its own portal over the live
+  tracker (collapsed bubble ↔ expanded panel; drag by the bubble/header). Driver
+  APK keeps its chat FAB; both show a **red unread badge** computed client-side
+  (no backend read-state): Web uses `localStorage` key
+  `taxilao_chat_read_{bookingId}`, APK uses `SharedPreferences`
+  `chat_read_{bookingId}`. Unread = messages from the other role whose
+  `createdAt` is newer than the stored last-read timestamp; opening/clearing the
+  chat marks it read. Do not add server-side read-state without updating both
+  consumers and this file.
 - The live tracker is rendered from inside booking surfaces but displayed via a portal.
   Chat forms inside the portal must call `event.stopPropagation()` after
   `event.preventDefault()` so chat submission never bubbles into the parent booking
@@ -581,3 +640,4 @@ A feature is complete only when:
 5. Secrets are not exposed.
 6. No unnecessary background server is left running.
 7. This file is updated if architecture or operating rules changed.
+

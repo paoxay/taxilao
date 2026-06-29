@@ -500,9 +500,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   bool gpsActive = false;
   bool sendingStatus = false;
   int selectedTab = 0;
+  int chatUnread = 0;
   DateTime? lastGpsSentAt;
   Set<String> seenOfferIds = {};
   Set<String> seenAvailableJobIds = {};
+  Set<String> promptedCompletedReviewIds = {};
   bool jobsLoadedOnce = false;
   bool notificationsReady = false;
   Position? driverPosition;
@@ -538,8 +540,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     api = DriverApi(widget.session);
     setupDriverRuntime();
     loadJobs();
-    refreshTimer = Timer.periodic(
-        const Duration(seconds: 4), (_) => loadJobs(silent: true));
+    refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      loadJobs(silent: true);
+      _refreshChatBadge();
+    });
+    _refreshChatBadge();
     countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && bookings.any((booking) => booking.status == 'OFFERED'))
         setState(() {});
@@ -602,6 +607,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         loading = false;
         message = error.toString();
       });
+    }
+  }
+
+  Future<void> _refreshChatBadge() async {
+    final job = activeJob;
+    if (job == null ||
+        !['CONFIRMED', 'ON_THE_WAY', 'IN_PROGRESS'].contains(job.status)) {
+      if (chatUnread != 0 && mounted) setState(() => chatUnread = 0);
+      return;
+    }
+    try {
+      final messages = await api.listChatMessages(job.id);
+      if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      final lastRead = prefs.getInt('chat_read_${job.id}') ?? 0;
+      final count = messages
+          .where((message) =>
+              message.senderRole == 'USER' &&
+              message.createdAt != null &&
+              message.createdAt!.millisecondsSinceEpoch > lastRead)
+          .length;
+      if (count != chatUnread) setState(() => chatUnread = count);
+    } catch (_) {
+      // Badge refresh is best-effort; never block the jobs loop.
     }
   }
 
@@ -731,11 +760,64 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         }
       }
       await loadJobs(silent: true);
+      if (status == 'COMPLETED' && !updated.customerReviewGiven) {
+        promptCustomerReview(updated);
+      }
     } catch (error) {
       if (mounted) showSnack(context, error.toString());
     } finally {
       if (mounted) setState(() => sendingStatus = false);
     }
+  }
+
+  void promptCustomerReview(DriverBooking booking) {
+    if (promptedCompletedReviewIds.contains(booking.id) || booking.customerReviewGiven) return;
+    promptedCompletedReviewIds.add(booking.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xff101722),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        ),
+        builder: (sheetContext) {
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                14,
+                16,
+                MediaQuery.of(sheetContext).viewInsets.bottom + 18,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Rate customer',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  DriverCustomerReviewPanel(api: api, booking: booking),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    });
   }
 
   Future<void> confirmCancelBooking(DriverBooking booking) async {
@@ -839,7 +921,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     return true;
   }
 
-  void openFloatingChat(DriverBooking booking) {
+  Future<void> openFloatingChat(DriverBooking booking) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+        'chat_read_${booking.id}', DateTime.now().millisecondsSinceEpoch);
+    if (mounted) setState(() => chatUnread = 0);
+    if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -859,6 +946,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  width: 44,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0x55ffffff),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
                 Row(
                   children: [
                     const Icon(Icons.chat_bubble_outline,
@@ -1046,12 +1142,52 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       ),
       floatingActionButton: activeChatJob == null
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () => openFloatingChat(activeChatJob),
-              backgroundColor: const Color(0xfff1c45d),
-              foregroundColor: const Color(0xff15110a),
-              icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('ແຊັດ'),
+          : Stack(
+              clipBehavior: Clip.none,
+              children: [
+                FloatingActionButton.extended(
+                  onPressed: () => openFloatingChat(activeChatJob),
+                  backgroundColor: const Color(0xfff1c45d),
+                  foregroundColor: const Color(0xff15110a),
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('ແຊັດ'),
+                ),
+                if (chatUnread > 0)
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(minWidth: 22),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xffff5a5f), Color(0xffe11d2a)],
+                        ),
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: Color(0xff0d121b), width: 2),
+                        boxShadow: const [
+                          BoxShadow(
+                              color: Color(0x55e11d2a),
+                              blurRadius: 8,
+                              spreadRadius: 1),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          chatUnread > 9 ? '9+' : '$chatUnread',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
     );
   }

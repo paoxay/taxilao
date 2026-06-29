@@ -12,6 +12,38 @@
   --glass: rgba(255, 255, 255, 0.08);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
   --font-lao: "Noto Sans Lao", "Phetsarath OT", "Lao UI", "Saysettha OT", Inter, ui-sans-serif, system-ui, sans-serif;
+
+  /* === 2026 Premium Design Tokens === */
+  --ink-900: #06070b;
+  --ink-800: #0b0d14;
+  --ink-700: #10131c;
+  --ink-600: #161a26;
+  --gold-100: #fbeec5;
+  --gold-300: #f2d891;
+  --gold-500: #d7a84a;
+  --gold-700: #a8792d;
+  --gold-grad: linear-gradient(135deg, #f2d891 0%, #d7a84a 48%, #b8862f 100%);
+  --gold-grad-soft: linear-gradient(135deg, rgba(242, 216, 145, 0.22), rgba(215, 168, 74, 0.12));
+  --text-hi: #ffffff;
+  --text: #e9edf5;
+  --text-lo: #9aa3b4;
+  --line-soft: rgba(255, 255, 255, 0.08);
+  --line-gold: rgba(215, 168, 74, 0.45);
+  --glass-1: rgba(255, 255, 255, 0.05);
+  --glass-2: rgba(255, 255, 255, 0.08);
+  --glass-3: rgba(16, 19, 28, 0.66);
+  --radius-xs: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --shadow-gold: 0 16px 40px rgba(215, 168, 74, 0.22);
+  --ring-gold: 0 0 0 1px rgba(215, 168, 74, 0.5), 0 12px 30px rgba(215, 168, 74, 0.18);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --space-bottom-nav: 78px;
+  color-scheme: dark;
 }
 
 * {
@@ -4566,3 +4598,1126 @@ strong,
     scroll-snap-align: start;
   }
 }
+.ride-completed-review {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 14px;
+  color: #f7faf8;
+  background: linear-gradient(180deg, rgba(21, 31, 45, 0.96), rgba(11, 18, 25, 0.98));
+  border: 1px solid rgba(242, 216, 145, 0.32);
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+}
+
+.ride-completed-review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ride-completed-review-head h3 {
+  margin: 2px 0 3px;
+  font-size: 20px;
+}
+
+.ride-completed-review-head span {
+  color: #b8c5bf;
+  font-size: 13px;
+}
+
+.ride-completed-review-head button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ride-completed-review textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  padding: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.ride-completed-stars {
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   TAXILAO 2026 — Premium dark + gold, mobile-app feel
+   Additive layer. Enhances shared components + adds bottom tab bar shell.
+   ========================================================================== */
+
+body {
+  background:
+    radial-gradient(1200px 700px at 82% -8%, rgba(215, 168, 74, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 6% 8%, rgba(59, 90, 130, 0.16), transparent 55%),
+    linear-gradient(180deg, #08090d 0%, #06070b 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(215, 168, 74, 0.32);
+  color: #fff;
+}
+
+/* Slim premium scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(215, 168, 74, 0.4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(215, 168, 74, 0.5), rgba(168, 121, 45, 0.4));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(215, 168, 74, 0.7);
+  background-clip: content-box;
+}
+
+/* ---- App shell: mobile-first content column + room for bottom dock ---- */
+.app-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.app-content {
+  flex: 1 0 auto;
+  width: 100%;
+  padding-bottom: calc(var(--space-bottom-nav) + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  .app-content {
+    padding-bottom: 40px;
+  }
+}
+
+/* ---- Refined shared buttons (2026) ---- */
+.btn {
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 22px rgba(0, 0, 0, 0.28);
+  font-weight: 700;
+  transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), border-color 220ms var(--ease), background 220ms var(--ease);
+}
+.btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-gold);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 14px 30px rgba(0, 0, 0, 0.34);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.btn-primary {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--gold-grad);
+  color: #1a1408;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 14px 34px rgba(215, 168, 74, 0.32);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 18px 40px rgba(215, 168, 74, 0.46);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+  background-size: 220% 100%;
+  background-position: 180% 0;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: background-position 900ms var(--ease);
+}
+.btn-primary:hover::after {
+  background-position: -120% 0;
+}
+
+/* ---- Eyebrow as gold gradient text ---- */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gold-grad-soft);
+  border: 1px solid var(--line-gold);
+  padding: 6px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+}
+.eyebrow {
+  color: var(--gold-100);
+}
+
+h1, h2 {
+  letter-spacing: -0.02em;
+}
+
+/* ---- Premium cards (2026): gradient ring + glow ---- */
+.card {
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(10px);
+  transition: transform 260ms var(--ease), border-color 260ms var(--ease), box-shadow 260ms var(--ease);
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, rgba(215, 168, 74, 0.5), rgba(255, 255, 255, 0.06) 40%, transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 260ms var(--ease);
+}
+.card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(215, 168, 74, 0.5);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(215, 168, 74, 0.18);
+}
+.card:hover::before {
+  opacity: 1;
+}
+.card img {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.card-body {
+  padding: 18px;
+}
+
+/* ---- Badges (2026 glassy) ---- */
+.badge {
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(8px);
+}
+.badge.gold {
+  border-color: var(--line-gold);
+  background: var(--gold-grad-soft);
+}
+
+/* ---- Panels / inputs (2026) ---- */
+.booking-panel,
+.panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(19, 35, 58, 0.55), rgba(8, 9, 13, 0.55));
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(20px);
+}
+.field input,
+.field select,
+.field textarea,
+.ride-completed-review textarea,
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="number"],
+input[type="search"],
+input[type="password"],
+select,
+textarea {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-hi);
+  transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease), background 200ms var(--ease);
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(215, 168, 74, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 4px rgba(215, 168, 74, 0.16);
+}
+
+/* ---- Nav top bar refinement ---- */
+.nav {
+  background: linear-gradient(180deg, rgba(6, 7, 11, 0.86), rgba(6, 7, 11, 0.62));
+  border-bottom: 1px solid var(--line-soft);
+  backdrop-filter: blur(22px) saturate(140%);
+}
+.brand-mark {
+  border-radius: var(--radius-xs);
+  background: var(--gold-grad-soft);
+  border: 1px solid var(--line-gold);
+  color: var(--gold-100);
+  font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ==========================================================================
+   Bottom tab bar (mobile-app navigation dock)
+   ========================================================================== */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+.bottom-nav-inner {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(16, 19, 28, 0.82), rgba(8, 9, 13, 0.9));
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.bottom-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 52px;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-lo);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 220ms var(--ease), transform 220ms var(--ease);
+}
+.bottom-nav-item svg {
+  transition: transform 260ms var(--ease-out);
+}
+.bottom-nav-item:hover {
+  color: var(--text-hi);
+}
+.bottom-nav-item:hover svg {
+  transform: translateY(-2px) scale(1.06);
+}
+.bottom-nav-item.active {
+  color: var(--gold-100);
+}
+.bottom-nav-item.active .bottom-nav-pill {
+  opacity: 1;
+  transform: translateX(-50%) scaleX(1);
+}
+.bottom-nav-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 26px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--gold-grad);
+  box-shadow: 0 0 12px rgba(215, 168, 74, 0.7);
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition: transform 280ms var(--ease-out), opacity 280ms var(--ease);
+}
+.bottom-nav-item.active svg {
+  filter: drop-shadow(0 4px 10px rgba(215, 168, 74, 0.5));
+}
+/* Primary "Book" CTA — gold filled pill within the dock */
+.bottom-nav-item.feature {
+  border-radius: 999px;
+  background: var(--gold-grad);
+  color: #1a1408;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(215, 168, 74, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.bottom-nav-item.feature:hover {
+  color: #1a1408;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(215, 168, 74, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.bottom-nav-item.feature:hover svg {
+  transform: none;
+}
+.bottom-nav-item.feature svg {
+  filter: none;
+}
+.bottom-nav-item.feature.active {
+  box-shadow: 0 14px 30px rgba(215, 168, 74, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+.bottom-nav-item.feature.active .bottom-nav-pill {
+  opacity: 0;
+}
+
+@media (min-width: 1024px) {
+  .bottom-nav {
+    bottom: 22px;
+  }
+  .bottom-nav-inner {
+    max-width: 520px;
+    border-radius: 26px;
+  }
+}
+
+/* ==========================================================================
+   Motion utilities
+   ========================================================================== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+@keyframes shimmer {
+  0%   { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+@keyframes pulseGold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(215, 168, 74, 0.4); }
+  50%      { box-shadow: 0 0 0 10px rgba(215, 168, 74, 0); }
+}
+.reveal {
+  animation: fadeUp 700ms var(--ease-out) both;
+}
+.reveal-2 { animation-delay: 90ms; }
+.reveal-3 { animation-delay: 170ms; }
+.reveal-4 { animation-delay: 250ms; }
+.float { animation: floatY 6s ease-in-out infinite; }
+.pulse-gold { animation: pulseGold 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Hero 2026 polish ---- */
+.home-booking-hero {
+  position: relative;
+}
+.home-intro h1 {
+  background: linear-gradient(180deg, #ffffff 0%, #cfd6e4 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.home-intro .lead {
+  color: var(--text);
+}
+
+/* Section rhythm */
+.home-drivers-section,
+.home-tour-section {
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ---- Profile avatar in top header (2026 premium) ---- */
+.member-menu summary {
+  min-height: 44px;
+  padding: 4px 14px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.member-menu summary:hover {
+  border-color: var(--line-gold);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+.member-menu summary > img,
+.member-menu-head > img {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--ink-800), var(--ink-800)) padding-box,
+    var(--gold-grad) border-box;
+  box-shadow: 0 0 0 1px rgba(215, 168, 74, 0.35), 0 4px 12px rgba(215, 168, 74, 0.25);
+}
+.member-menu summary > svg {
+  color: var(--gold-soft);
+}
+.member-menu-panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(16, 19, 28, 0.96), rgba(8, 9, 13, 0.98));
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(20px);
+}
+.member-menu-panel > a,
+.member-menu-panel > button {
+  border-radius: var(--radius);
+  transition: background 180ms var(--ease), color 180ms var(--ease);
+}
+.member-menu-head > img {
+  width: 42px;
+  height: 42px;
+}
+
+/* ==========================================================================
+   Floating draggable chat (customer live tracker)
+   ========================================================================== */
+.float-chat {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.float-chat-bubble,
+.float-chat-panel {
+  position: fixed;
+  pointer-events: auto;
+}
+.float-chat-handle {
+  touch-action: none;
+  cursor: grab;
+}
+.float-chat-handle:active {
+  cursor: grabbing;
+}
+
+.float-chat-bubble {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--gold-100);
+  background: linear-gradient(160deg, rgba(19, 35, 58, 0.96), rgba(8, 9, 13, 0.96));
+  border: 1px solid var(--line-gold);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+  transition: transform 200ms var(--ease), box-shadow 200ms var(--ease), border-color 200ms var(--ease);
+  animation: fadeUp 320ms var(--ease-out) both;
+}
+.float-chat-bubble:hover {
+  transform: translateY(-2px) scale(1.04);
+  border-color: rgba(215, 168, 74, 0.8);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(215, 168, 74, 0.18);
+}
+.float-chat-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff5a5f, #e11d2a);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  border: 2px solid var(--ink-900);
+  box-shadow: 0 4px 12px rgba(225, 29, 42, 0.5);
+  animation: pulseGold 1.8s ease-in-out infinite;
+}
+
+.float-chat-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(16, 19, 28, 0.97), rgba(8, 9, 13, 0.98));
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(24px) saturate(150%);
+  animation: fadeUp 260ms var(--ease-out) both;
+}
+.float-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  user-select: none;
+}
+.float-chat-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gold-100);
+}
+.float-chat-head small {
+  color: var(--text-lo);
+  font-size: 12px;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+.float-chat-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+.float-chat-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.float-chat-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+}
+.float-chat-bubble {
+  max-width: 82%;
+  padding: 8px 11px;
+  border-radius: 14px 14px 14px 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line-soft);
+  color: var(--text);
+  word-break: break-word;
+}
+.float-chat-bubble small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-lo);
+  margin-bottom: 2px;
+}
+.float-chat-bubble.mine {
+  align-self: flex-end;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--gold-grad-soft);
+  border-color: var(--line-gold);
+  color: var(--gold-100);
+}
+.float-chat-empty {
+  margin: auto;
+  color: var(--text-lo);
+  font-size: 13px;
+}
+
+.float-chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.float-chat-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 999px;
+}
+.float-chat-form button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--gold-grad);
+  color: #1a1408;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(215, 168, 74, 0.32);
+  transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+.float-chat-form button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.float-chat-form button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.float-chat-error {
+  display: block;
+  padding: 0 14px 10px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Phone OTP sign-up / login
+   ========================================================================== */
+.phone-otp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  width: 100%;
+}
+.phone-otp h2 {
+  margin: 6px 0 0;
+}
+.phone-otp > p {
+  color: var(--text-lo);
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.phone-otp-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+.phone-otp-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.phone-otp-form .field span {
+  font-size: 13px;
+  color: var(--text-lo);
+  font-weight: 600;
+}
+.phone-otp-form input {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+}
+.phone-otp-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--gold-soft);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px;
+}
+.link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dev-hint {
+  color: var(--gold-100) !important;
+  font-weight: 700;
+}
+.member-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 18px 0 6px;
+  color: var(--text-lo);
+  font-size: 12px;
+}
+.member-login-divider::before,
+.member-login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 8px;
+  width: 100%;
+}
+.mode-tabs button {
+  flex: 1;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-lo);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 180ms var(--ease), color 180ms var(--ease);
+}
+.mode-tabs button.active {
+  background: var(--gold-grad);
+  color: #1a1408;
+  box-shadow: 0 6px 16px rgba(215, 168, 74, 0.3);
+}
+
+.phone-input-wrap {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.phone-input-wrap:focus-within {
+  border-color: rgba(215, 168, 74, 0.7);
+  box-shadow: 0 0 0 4px rgba(215, 168, 74, 0.16);
+}
+.phone-prefix {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  height: 100%;
+  align-self: stretch;
+  flex: 0 0 auto;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  border-right: 1px solid var(--line-soft);
+  white-space: nowrap;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
+}
+.lao-flag {
+  display: block;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 20px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.phone-input-wrap input {
+  border: none;
+  background: transparent;
+  box-shadow: none !important;
+  flex: 1;
+  padding: 12px 14px;
+}
+.phone-input-wrap input:focus {
+  box-shadow: none !important;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 380px) {
+  .field-row { grid-template-columns: 1fr; }
+}
+
+.countdown {
+  color: var(--text-lo);
+  font-size: 13px;
+  font-weight: 600;
+}
+.link-btn.center {
+  width: 100%;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Bright "Continue with Google" button (overrides dark .btn glass) */
+.google-login-button {
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.google-login-button:hover {
+  background: #f6f7f9;
+  color: #1f2937;
+  border-color: rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.google-login-button:active {
+  transform: translateY(0);
+}
+.google-login-button .g-logo {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+/* ==========================================================================
+   Member login / OTP visual polish
+   UI-only: keeps the existing OTP, password, Google, and redirect logic intact.
+   ========================================================================== */
+.member-login {
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 440px);
+  align-items: center;
+}
+
+.member-login-copy {
+  max-width: 740px;
+}
+
+.member-login-copy .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 13px;
+  border: 1px solid rgba(245, 203, 107, 0.35);
+  border-radius: 999px;
+  background: rgba(245, 203, 107, 0.15);
+  color: var(--gold-100);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.member-login-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border-color: rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 203, 107, 0.11), transparent 34%),
+    linear-gradient(180deg, rgba(17, 24, 38, 0.96), rgba(7, 10, 16, 0.96));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.member-login-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%);
+}
+
+.phone-otp {
+  position: relative;
+  z-index: 1;
+  gap: 10px;
+}
+
+.member-login-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(245, 203, 107, 0.22), rgba(245, 203, 107, 0.08));
+}
+
+.phone-otp h2 {
+  margin-top: 4px;
+  font-size: clamp(28px, 4.8vw, 36px);
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.phone-otp > p {
+  max-width: 310px;
+  margin-bottom: 4px;
+  color: rgba(232, 238, 247, 0.72);
+  line-height: 1.55;
+}
+
+.mode-tabs {
+  min-height: 48px;
+  padding: 4px;
+  margin: 4px 0 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.mode-tabs button {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.mode-tabs button.active {
+  background: linear-gradient(135deg, #f7d77d, #d4a23d);
+  box-shadow: 0 10px 24px rgba(215, 168, 74, 0.28);
+}
+
+.phone-otp-form {
+  gap: 11px;
+}
+
+.phone-otp-form .field {
+  gap: 7px;
+}
+
+.phone-otp-form .field > span {
+  color: rgba(232, 238, 247, 0.78);
+  font-size: 12px;
+}
+
+.phone-otp-form input,
+.phone-input-wrap {
+  min-height: 48px;
+}
+
+.phone-input-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.phone-prefix {
+  min-width: 112px;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.lao-flag {
+  width: 25px;
+  height: 17px;
+}
+
+.phone-input-wrap input {
+  min-width: 0;
+  width: 100%;
+  padding: 0 14px;
+  font-size: 15px;
+}
+
+.phone-input-wrap input::placeholder {
+  color: rgba(232, 238, 247, 0.42);
+}
+
+.phone-otp .btn-primary {
+  min-height: 50px;
+  border-radius: 15px;
+  box-shadow: 0 14px 34px rgba(215, 168, 74, 0.25);
+}
+
+.member-login-divider {
+  position: relative;
+  z-index: 1;
+  margin: 18px 0 4px;
+}
+
+.google-login-button {
+  position: relative;
+  z-index: 1;
+  min-height: 50px;
+  margin-top: 14px;
+  border-radius: 15px;
+}
+
+.member-login-note {
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  color: rgba(232, 238, 247, 0.62);
+}
+
+@media (max-width: 860px) {
+  .member-login {
+    display: block;
+    min-height: auto;
+    padding: 28px 16px 116px;
+  }
+
+  .member-login-copy {
+    margin-bottom: 22px;
+  }
+
+  .member-login-copy h1 {
+    max-width: 420px;
+    font-size: clamp(34px, 10vw, 46px);
+    line-height: 1.06;
+  }
+
+  .member-login-copy .lead {
+    max-width: 360px;
+  }
+
+  .member-login-panel {
+    width: min(100%, 430px);
+    margin: 0 auto;
+    padding: 18px 15px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 380px) {
+  .member-login {
+    padding-inline: 12px;
+  }
+
+  .member-login-panel {
+    padding: 16px 13px;
+  }
+
+  .phone-prefix {
+    min-width: 96px;
+    padding-inline: 8px;
+    font-size: 13px;
+  }
+
+  .lao-flag {
+    width: 22px;
+    height: 15px;
+  }
+
+  .mode-tabs button {
+    font-size: 11px;
+    padding-inline: 6px;
+  }
+}
+

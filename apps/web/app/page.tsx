@@ -14,16 +14,18 @@ export default async function HomePage({ searchParams }: { searchParams?: { lang
       <Nav locale={locale} />
       <section className="hero home-booking-hero">
         <div className="home-intro">
-          <p className="eyebrow">{copy.eyebrow}</p>
-          <h1>{copy.headline}</h1>
-          <p className="lead">{copy.lead}</p>
-          <div className="hero-actions">
+          <p className="eyebrow reveal">{copy.eyebrow}</p>
+          <h1 className="reveal reveal-2">{copy.headline}</h1>
+          <p className="lead reveal reveal-3">{copy.lead}</p>
+          <div className="hero-actions reveal reveal-4">
             <Link className="btn btn-primary" href={`/booking?lang=${locale}`}>
               <CarFront size={18} /> {copy.bookPremiumDriver}
             </Link>
           </div>
         </div>
-        <BookingEstimator />
+        <div className="reveal reveal-3 float">
+          <BookingEstimator />
+        </div>
       </section>
     </main>
   );

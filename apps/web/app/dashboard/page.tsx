@@ -78,7 +78,7 @@ type MemberTokens = {
 
 const activeStatuses = ["PENDING", "OFFERED", "CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"];
 const lastBookingKey = "taxilao_last_booking_id";
-const liveTrackerStatuses = [...activeStatuses, "CANCELLED"];
+const liveTrackerStatuses = [...activeStatuses, "COMPLETED", "CANCELLED"];
 const dismissedBookingKey = "taxilao_dismissed_booking_id";
 const dismissedBookingsKey = "taxilao_dismissed_booking_ids";
 
@@ -113,6 +113,10 @@ function clearStoredBookingId(id?: string) {
   if (!id || localStorage.getItem(lastBookingKey) === id) {
     localStorage.removeItem(lastBookingKey);
   }
+}
+
+function needsDriverReview(booking: PublicBooking) {
+  return booking.status === "COMPLETED" && Boolean(booking.driver?.id) && !booking.driverReview?.rating;
 }
 
 export default function UserDashboardPage() {
@@ -224,8 +228,9 @@ export default function UserDashboardPage() {
 
   useEffect(() => {
     if (!booking) return;
-    if (activeStatuses.includes(booking.status)) {
+    if (activeStatuses.includes(booking.status) || needsDriverReview(booking)) {
       localStorage.setItem(lastBookingKey, booking.id);
+      undismissBookingId(booking.id);
     } else {
       dismissBookingId(booking.id);
       clearStoredBookingId(booking.id);
@@ -353,9 +358,10 @@ export default function UserDashboardPage() {
           initialBooking={booking as any}
           onClose={(closedBooking) => {
             const nextBooking = (closedBooking as PublicBooking | undefined) || booking;
-            if (activeStatuses.includes(nextBooking.status)) {
+            if (activeStatuses.includes(nextBooking.status) || needsDriverReview(nextBooking)) {
               setBooking(nextBooking);
               localStorage.setItem(lastBookingKey, nextBooking.id);
+              undismissBookingId(nextBooking.id);
               return;
             }
             dismissBookingId(nextBooking.id);

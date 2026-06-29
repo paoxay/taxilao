@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BadgeCheck, ChevronDown, Crown, Languages, Menu, Star } from "lucide-react";
+import { BadgeCheck, CarFront, ChevronDown, Compass, Crown, Home, Languages, Menu, Star } from "lucide-react";
 import { Driver, Locale, TourPackage, formatLak, homepageCopy, i18n } from "@taxilao/shared";
 import { MemberProfileMenu } from "./member-profile-menu";
 import { useUiCopy } from "./use-ui-copy";
@@ -173,5 +174,71 @@ export function TourCard({ tour, driverName }: { tour: TourPackage; driverName: 
         </Link>
       </div>
     </article>
+  );
+}
+
+const navHomeLabels: Record<Locale, string> = {
+  lo: "ໜ້າຫຼັກ", en: "Home", th: "หน้าหลัก", zh: "首页", vi: "Trang chủ", ja: "ホーム", ko: "홈"
+};
+
+function useLocaleSuffix() {
+  const [suffix, setSuffix] = useState("");
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search).get("lang");
+    const saved = localStorage.getItem("taxilao_locale");
+    const next = i18n.locales.includes(query as Locale)
+      ? (query as Locale)
+      : i18n.locales.includes(saved as Locale)
+        ? (saved as Locale)
+        : "lo";
+    setSuffix(`?lang=${next}`);
+  }, []);
+  return suffix;
+}
+
+export function BottomNav() {
+  const pathname = usePathname() ?? "/";
+  const suffix = useLocaleSuffix();
+  const [locale, setLocale] = useState<Locale>("lo");
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search).get("lang");
+    const saved = localStorage.getItem("taxilao_locale");
+    const next = i18n.locales.includes(query as Locale)
+      ? (query as Locale)
+      : i18n.locales.includes(saved as Locale)
+        ? (saved as Locale)
+        : "lo";
+    setLocale(next);
+  }, [suffix]);
+
+  const copy = homepageCopy[locale];
+
+  const items = [
+    { key: "home", label: navHomeLabels[locale], href: `/${suffix}`, icon: Home, active: pathname === "/" },
+    { key: "drivers", label: copy.navDrivers, href: `/drivers${suffix}`, icon: CarFront, active: pathname.startsWith("/drivers") },
+    { key: "tours", label: copy.navTours, href: `/tours${suffix}`, icon: Compass, active: pathname.startsWith("/tours") },
+    { key: "book", label: copy.book, href: `/booking${suffix}`, icon: Crown, active: pathname.startsWith("/booking"), feature: true }
+  ];
+
+  return (
+    <nav className="bottom-nav" aria-label="Primary">
+      <div className="bottom-nav-inner">
+        {items.map(({ key, label, href, icon: Icon, active, feature }) => (
+          <Link
+            key={key}
+            href={href}
+            className={`bottom-nav-item${active ? " active" : ""}${feature ? " feature" : ""}`}
+            aria-current={active ? "page" : undefined}
+          >
+            <span className="bottom-nav-icon">
+              <Icon size={feature ? 24 : 20} />
+            </span>
+            <span className="bottom-nav-label">{label}</span>
+            {!feature && <span className="bottom-nav-pill" aria-hidden="true" />}
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }

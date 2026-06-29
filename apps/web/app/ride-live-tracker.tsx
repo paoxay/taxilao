@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { CarFront, Check, CircleDot, Clock3, MapPin, Navigation, Route, Send, ShieldCheck, X } from "lucide-react";
+import { CarFront, Check, CircleDot, Clock3, MapPin, Navigation, Route, ShieldCheck, Star, X } from "lucide-react";
 import { formatLak } from "@taxilao/shared";
 import { useUiCopy } from "./use-ui-copy";
+import { FloatingChat } from "./floating-chat";
 
 const RideLiveMap = dynamic(() => import("./ride-live-map").then((module) => module.RideLiveMap), { ssr: false });
 
@@ -32,6 +33,12 @@ export type LiveBooking = {
     updatedAt?: string;
   } | null;
   cancelledAt?: string;
+  driverReview?: {
+    rating: number;
+    comment?: string;
+    reviewId?: string;
+    createdAt?: string;
+  } | null;
   cancelledBy?: "DRIVER" | "USER" | string;
   cancellationReason?: string;
   driver?: {
@@ -88,6 +95,7 @@ export function RideLiveTracker({
   const [cancelStatus, setCancelStatus] = useState<"idle" | "loading" | "error">("idle");
   const [cancelError, setCancelError] = useState("");
   const [approachRoute, setApproachRoute] = useState<RouteEstimate | null>(null);
+  const [reviewDismissed, setReviewDismissed] = useState(false);
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
@@ -110,6 +118,7 @@ export function RideLiveTracker({
   const chatEnabled = ["CONFIRMED", "ON_THE_WAY", "IN_PROGRESS"].includes(booking.status) && Boolean(booking.driver?.id);
   const showApproachRoute = ["CONFIRMED", "ON_THE_WAY"].includes(booking.status);
   const driverRating = Number.isFinite(Number(booking.driver?.rating)) ? Number(booking.driver?.rating) : 5;
+  const showDriverReviewPrompt = booking.status === "COMPLETED" && Boolean(booking.driver?.id) && !booking.driverReview?.rating && !reviewDismissed;
 
   useEffect(() => {
     if (terminalStatus) return;
@@ -395,25 +404,17 @@ export function RideLiveTracker({
         ) : null}
 
         {chatEnabled ? (
-          <section className="ride-chat-card">
-            <div className="ride-chat-head">
-              <strong>{copy.liveChat}</strong>
-              {booking.driver?.name ? <small>{booking.driver.name}</small> : null}
-            </div>
-            <div className="ride-chat-messages">
-              {chatMessages.length ? chatMessages.map((message) => (
-                <div className={`ride-chat-bubble ${message.senderRole === "USER" ? "mine" : ""}`} key={message.id}>
-                  <small>{message.senderName}</small>
-                  <span>{message.text}</span>
-                </div>
-              )) : <p>{copy.noChatMessages}</p>}
-            </div>
-            <form className="ride-chat-form" onSubmit={sendChatMessage}>
-              <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder={copy.typeMessage} />
-              <button disabled={chatStatus === "sending" || !chatText.trim()} type="submit"><Send size={17} /></button>
-            </form>
-            {chatError ? <small className="ride-chat-error">{chatError}</small> : null}
-          </section>
+          <FloatingChat
+            bookingId={booking.id}
+            messages={chatMessages}
+            text={chatText}
+            onTextChange={setChatText}
+            onSubmit={sendChatMessage}
+            status={chatStatus}
+            error={chatError}
+            driverName={booking.driver?.name}
+            copy={{ liveChat: copy.liveChat, noChatMessages: copy.noChatMessages, typeMessage: copy.typeMessage }}
+          />
         ) : booking.driver ? (
           <div className="ride-chat-locked">{copy.chatAfterAccepted}</div>
         ) : null}
@@ -465,6 +466,19 @@ export function RideLiveTracker({
           })}
         </ol>
 
+        {showDriverReviewPrompt ? (
+          <CompletedDriverReviewPrompt
+            apiUrl={apiUrl}
+            token={token}
+            booking={booking}
+            onClose={() => setReviewDismissed(true)}
+            onReviewed={(review) => {
+              setBooking((current) => ({ ...current, driverReview: review }));
+              setReviewDismissed(true);
+            }}
+          />
+        ) : null}
+
         <footer className="ride-live-footer">
           <span><small>{copy.rideRequestId}</small><strong>#{booking.id.slice(0, 8).toUpperCase()}</strong></span>
           {canCancel ? <button className="btn ride-cancel-btn" disabled={cancelStatus === "loading"} onClick={cancelRide} type="button">{cancelStatus === "loading" ? copy.sending : copy.cancelRide}</button> : null}
@@ -474,5 +488,79 @@ export function RideLiveTracker({
       </section>
     </div>,
     document.body
+  );
+}
+
+
+function CompletedDriverReviewPrompt({
+  apiUrl,
+  token,
+  booking,
+  onClose,
+  onReviewed
+}: {
+  apiUrl: string;
+  token: string;
+  booking: LiveBooking;
+  onClose: () => void;
+  onReviewed: (review: NonNullable<LiveBooking["driverReview"]>) => void;
+}) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  async function submitReview() {
+    if (status === "loading") return;
+    if (!comment.trim()) {
+      setStatus("error");
+      setMessage("Please write a short comment before saving.");
+      return;
+    }
+    setStatus("loading");
+    setMessage("");
+    try {
+      const response = await fetch(`${apiUrl}/bookings/${booking.id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rating, comment })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Review failed");
+      onReviewed({ rating, comment, reviewId: data.reviewId, createdAt: data.createdAt });
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Review failed");
+    }
+  }
+
+  return (
+    <section className="ride-completed-review" aria-label="Rate driver">
+      <div className="ride-completed-review-head">
+        <div>
+          <p className="eyebrow">TRIP COMPLETED</p>
+          <h3>Rate your driver</h3>
+          <span>{booking.driver?.name || "TAXILAO Driver"}</span>
+        </div>
+        <button aria-label="Close rating" onClick={onClose} type="button"><X size={18} /></button>
+      </div>
+      <div className="review-stars ride-completed-stars" aria-label="rating">
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button disabled={status === "loading"} key={value} onClick={() => setRating(value)} type="button">
+            <Star size={22} fill={value <= rating ? "currentColor" : "none"} />
+          </button>
+        ))}
+      </div>
+      <textarea
+        disabled={status === "loading"}
+        value={comment}
+        onChange={(event) => setComment(event.target.value)}
+        placeholder="Write a short note about your driver..."
+      />
+      <button className="btn btn-primary" disabled={status === "loading"} onClick={submitReview} type="button">
+        {status === "loading" ? "Saving..." : "Save rating"}
+      </button>
+      {message ? <p className="form-message error">{message}</p> : null}
+    </section>
   );
 }
