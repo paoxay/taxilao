@@ -1281,6 +1281,135 @@ class DriverStatusPanel extends StatelessWidget {
   }
 }
 
+class ProfileHeroCard extends StatelessWidget {
+  const ProfileHeroCard({
+    super.key,
+    required this.driver,
+    required this.online,
+    required this.completedJobs,
+  });
+
+  final DriverProfile driver;
+  final bool online;
+  final int completedJobs;
+
+  @override
+  Widget build(BuildContext context) {
+    final rating = driver.rating.clamp(1, 5);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          colors: [Color(0xff162235), Color(0xff0d1420)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: const Color(0xff31415a)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 14)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 38,
+                backgroundColor: const Color(0xfff1c45d),
+                backgroundImage: driver.portraitUrl.isNotEmpty
+                    ? NetworkImage(driver.portraitUrl)
+                    : null,
+                child: driver.portraitUrl.isEmpty
+                    ? Text(initials(driver.name),
+                        style: const TextStyle(
+                            color: Color(0xff15110a),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900))
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(driver.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Text('ID: ${driver.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Color(0xffaeb8c7))),
+                  ],
+                ),
+              ),
+              StatusPill(text: online ? 'ONLINE' : 'OFFLINE', active: online),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0x66101824),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xff33445f)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Driver rating',
+                          style: TextStyle(
+                              color: Color(0xff9ba7b7),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Color(0xfff1c45d), size: 19),
+                          const SizedBox(width: 5),
+                          Text(rating.toStringAsFixed(1),
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                          const SizedBox(width: 7),
+                          Text('${driver.reviewCount} reviews',
+                              style: const TextStyle(color: Color(0xff9ba7b7), fontSize: 12)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 38, color: const Color(0xff33445f)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Completed jobs',
+                          style: TextStyle(
+                              color: Color(0xff9ba7b7),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text('$completedJobs jobs',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class DriverProfilePanel extends StatelessWidget {
   const DriverProfilePanel({
     super.key,
@@ -1309,36 +1438,10 @@ class DriverProfilePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppPanel(
-          highlight: true,
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 48,
-                backgroundColor: const Color(0xfff1c45d),
-                backgroundImage: driver.portraitUrl.isNotEmpty
-                    ? NetworkImage(driver.portraitUrl)
-                    : null,
-                child: driver.portraitUrl.isEmpty
-                    ? Text(initials(driver.name),
-                        style: const TextStyle(
-                            color: Color(0xff15110a),
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900))
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              Text(driver.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 23, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text('ID: ${driver.id}',
-                  style: const TextStyle(color: Color(0xffaeb8c7))),
-              const SizedBox(height: 10),
-              StatusPill(text: online ? 'ONLINE' : 'OFFLINE', active: online),
-            ],
-          ),
+        ProfileHeroCard(
+          driver: driver,
+          online: online,
+          completedJobs: completedJobs,
         ),
         const SizedBox(height: 12),
         AppPanel(
@@ -1686,6 +1789,10 @@ class JobCard extends StatelessWidget {
                 ],
                 const SizedBox(height: 10),
                 CustomerPreview(booking: booking),
+                if (booking.hasDriverReview) ...[
+                  const SizedBox(height: 8),
+                  DriverReviewSummary(booking: booking),
+                ],
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -2211,6 +2318,56 @@ class CustomerPreview extends StatelessWidget {
   }
 }
 
+class DriverReviewSummary extends StatelessWidget {
+  const DriverReviewSummary({super.key, required this.booking});
+
+  final DriverBooking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!booking.hasDriverReview) return const SizedBox.shrink();
+    final rating = booking.driverReviewRating!.clamp(1, 5);
+    final comment = booking.driverReviewComment.trim();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xff181f2b),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xff3a2f18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium_outlined,
+                  color: Color(0xfff1c45d), size: 18),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Customer rating',
+                  style: TextStyle(fontWeight: FontWeight.w900))),
+              Row(
+                children: List.generate(
+                  5,
+                  (index) => Icon(
+                    index < rating ? Icons.star : Icons.star_border,
+                    color: const Color(0xfff1c45d),
+                    size: 17,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (comment.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(comment,
+                style: const TextStyle(color: Color(0xffcbd4e1), height: 1.35)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class DriverProfile {
   DriverProfile({
     required this.id,
@@ -2218,6 +2375,8 @@ class DriverProfile {
     required this.city,
     required this.vehicleType,
     required this.portraitUrl,
+    required this.rating,
+    required this.reviewCount,
     required this.walletBalanceLak,
     required this.walletLowBalanceWarningLak,
     required this.walletLowBalance,
@@ -2228,6 +2387,8 @@ class DriverProfile {
   final String city;
   final String vehicleType;
   final String portraitUrl;
+  final double rating;
+  final int reviewCount;
   final int walletBalanceLak;
   final int walletLowBalanceWarningLak;
   final bool walletLowBalance;
@@ -2239,6 +2400,8 @@ class DriverProfile {
       city: json['city']?.toString() ?? '',
       vehicleType: json['vehicleType']?.toString() ?? '',
       portraitUrl: json['portraitUrl']?.toString() ?? '',
+      rating: numberToDouble(json['rating'] ?? 5),
+      reviewCount: numberToInt(json['reviewCount']),
       walletBalanceLak: numberToInt(json['walletBalanceLak']),
       walletLowBalanceWarningLak:
           numberToInt(json['walletLowBalanceWarningLak']),
@@ -2252,6 +2415,8 @@ class DriverProfile {
         'city': city,
         'vehicleType': vehicleType,
         'portraitUrl': portraitUrl,
+        'rating': rating,
+        'reviewCount': reviewCount,
         'walletBalanceLak': walletBalanceLak,
         'walletLowBalanceWarningLak': walletLowBalanceWarningLak,
         'walletLowBalance': walletLowBalance,
@@ -2271,6 +2436,9 @@ class DriverBooking {
     required this.customerTrips,
     required this.customerContactVisible,
     required this.customerReviewGiven,
+    required this.driverReviewRating,
+    required this.driverReviewComment,
+    required this.driverReviewCreatedAt,
     required this.customerPhone,
     required this.note,
     required this.status,
@@ -2299,6 +2467,9 @@ class DriverBooking {
   final int customerTrips;
   final bool customerContactVisible;
   final bool customerReviewGiven;
+  final int? driverReviewRating;
+  final String driverReviewComment;
+  final DateTime? driverReviewCreatedAt;
   final String customerPhone;
   final String note;
   final String status;
@@ -2342,6 +2513,16 @@ class DriverBooking {
       customerContactVisible: json['customerContactVisible'] == true,
       customerReviewGiven: json['customerReview'] is Map &&
           json['customerReview']['rating'] != null,
+      driverReviewRating: json['driverReview'] is Map &&
+              json['driverReview']['rating'] != null
+          ? numberToInt(json['driverReview']['rating'])
+          : null,
+      driverReviewComment: json['driverReview'] is Map
+          ? json['driverReview']['comment']?.toString() ?? ''
+          : '',
+      driverReviewCreatedAt: json['driverReview'] is Map
+          ? parseDate(json['driverReview']['createdAt'])
+          : null,
       customerPhone: json['customerPhone']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
       status: json['status']?.toString() ?? 'PENDING',
@@ -2365,6 +2546,8 @@ class DriverBooking {
 
   bool get canViewCustomerContact =>
       customerContactVisible || isActiveForDriver || status == 'COMPLETED';
+
+  bool get hasDriverReview => driverReviewRating != null;
 
   bool get hasPickup => pickupLocation != null;
 
@@ -3517,6 +3700,10 @@ void showBookingDetails(BuildContext context, DriverBooking booking,
                   child: Column(
                     children: [
                       CustomerPreview(booking: booking),
+                      if (booking.hasDriverReview) ...[
+                        const SizedBox(height: 12),
+                        DriverReviewSummary(booking: booking),
+                      ],
                       const SizedBox(height: 12),
                       DetailLine(label: 'ສະຖານະ', value: booking.statusLabel),
                       DetailLine(label: 'ຈຸດຮັບ', value: booking.pickup),
