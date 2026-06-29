@@ -15,6 +15,7 @@ const passport = require("passport");
 const { Strategy: GoogleStrategy } = require("passport-google-oauth20");
 
 const app = express();
+app.set("trust proxy", 1);
 const port = Number(process.env.API_PORT || 4000);
 const webOrigin = process.env.WEB_ORIGIN || "http://localhost:3000";
 const adminOrigin = process.env.ADMIN_ORIGIN || "http://localhost:3001";
@@ -25,6 +26,7 @@ const driverPassword = process.env.DRIVER_PASSWORD || "taxilao-driver";
 const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
 const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || `http://localhost:${port}/auth/google/callback`;
+const configuredPublicApiUrl = (process.env.PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/$/, "");
 const mapboxAccessToken = process.env.MAPBOX_ACCESS_TOKEN || "";
 const mapboxConfigured =
   Boolean(mapboxAccessToken) &&
@@ -962,6 +964,60 @@ function safeMongoLabel(uri) {
   }
 }
 
+function getPublicApiOrigin(req) {
+  if (configuredPublicApiUrl) return configuredPublicApiUrl;
+  try {
+    const callbackOrigin = new URL(googleCallbackUrl).origin;
+    if (callbackOrigin) return callbackOrigin;
+  } catch (_error) {
+    // Ignore invalid local callback values and fall through to request host.
+  }
+  const forwardedProto = String(req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  const protocol = forwardedProto || req.protocol || "http";
+  return `${protocol}://${req.get("host")}`.replace(/\/$/, "");
+}
+
+function getDefaultPublicApiOrigin() {
+  if (configuredPublicApiUrl) return configuredPublicApiUrl;
+  try {
+    return new URL(googleCallbackUrl).origin;
+  } catch (_error) {
+    return "";
+  }
+}
+
+function normalizeUploadUrl(value, req = null) {
+  if (!value || typeof value !== "string") return value || "";
+  if (!value.includes("/uploads/")) return value;
+  const publicOrigin = req ? getPublicApiOrigin(req) : getDefaultPublicApiOrigin();
+  if (!publicOrigin) return value;
+  if (value.startsWith("/uploads/")) return `${publicOrigin}${value}`;
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.startsWith("/uploads/")) {
+      return `${publicOrigin}${parsed.pathname}${parsed.search}`;
+    }
+  } catch (_error) {
+    // Non-URL image strings are returned unchanged.
+  }
+  return value;
+}
+
+function normalizeDriverImageUrls(driver, req = null) {
+  if (!driver) return driver;
+  return {
+    ...driver,
+    coverUrl: normalizeUploadUrl(driver.coverUrl, req),
+    portraitUrl: normalizeUploadUrl(driver.portraitUrl, req),
+    vehicleUrl: normalizeUploadUrl(driver.vehicleUrl, req)
+  };
+}
+
+function normalizeBookingImageUrls(booking, req = null) {
+  if (!booking?.driver) return booking;
+  return { ...booking, driver: normalizeDriverImageUrls(booking.driver, req) };
+}
+
 function saveImageDataUrl(value, req, folder) {
   if (!value || typeof value !== "string") return "";
   if (!value.startsWith("data:image/")) return value;
@@ -982,7 +1038,7 @@ function saveImageDataUrl(value, req, folder) {
   const filename = `${Date.now()}-${randomUUID()}.${extension}`;
   fs.writeFileSync(path.join(folderPath, filename), buffer);
 
-  return `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}`;
+  return `${getPublicApiOrigin(req)}/uploads/${folder}/${filename}`;
 }
 
 function saveImageFields(req, fields, folder) {
@@ -1342,9 +1398,9 @@ function publicDriver(driver) {
     active: driver.active !== false,
     routes: driver.routes || [],
     bio: driver.bio || "",
-    coverUrl: driver.coverUrl || "",
-    portraitUrl: driver.portraitUrl || "",
-    vehicleUrl: driver.vehicleUrl || "",
+    coverUrl: normalizeUploadUrl(driver.coverUrl || ""),
+    portraitUrl: normalizeUploadUrl(driver.portraitUrl || ""),
+    vehicleUrl: normalizeUploadUrl(driver.vehicleUrl || ""),
     status: driver.status || (driver.verified ? "APPROVED" : "PENDING_REVIEW"),
     username: driver.username || driver.id,
     hasPassword: Boolean(driver.passwordHash && driver.passwordSalt),
@@ -1597,7 +1653,7 @@ async function getBookingLiveView(bookingId, userId = null) {
   const match = { id: bookingId };
   if (userId) match.userId = userId;
 
-  return db.collection("bookings").aggregate([
+  const liveBooking = await db.collection("bookings").aggregate([
     { $match: match },
     {
       $lookup: {
@@ -1662,6 +1718,7 @@ async function getBookingLiveView(bookingId, userId = null) {
       }
     }
   ]).next();
+  return normalizeBookingImageUrls(liveBooking);
 }
 
 function writeBookingEvent(response, event, payload) {
@@ -2455,7 +2512,7 @@ app.post("/bookings/lookup", lookupLimiter, async (req, res, next) => {
     ]).next();
 
     if (!booking) return res.status(404).json({ message: "Booking not found. Check Booking ID and phone number." });
-    res.json(booking);
+    res.json(normalizeBookingImageUrls(booking));
   } catch (error) {
     next(error);
   }
@@ -2527,7 +2584,7 @@ app.get("/bookings/me", authenticate, requireActiveMember, async (req, res, next
         }
       }
     ]).toArray();
-    res.json(bookings);
+    res.json(bookings.map((booking) => normalizeBookingImageUrls(booking)));
   } catch (error) {
     next(error);
   }

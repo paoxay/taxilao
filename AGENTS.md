@@ -348,6 +348,7 @@ Tour Admin fields:
 
 Uploaded images are data URLs in the Admin form and are saved by the API into
 `apps/api/uploads`. Do not replace uploads with URL-only fields.
+Upload URLs must never be returned to production clients as `http://localhost:4000/uploads/...`. The API normalizes `/uploads` URLs through `normalizeUploadUrl()`/`publicDriver()` to the public API origin (`PUBLIC_API_URL`/`NEXT_PUBLIC_API_URL`/Google callback origin) so Admin/Web can display older locally-saved records safely over HTTPS.
 
 Driver Admin fields include `username` and a password reset field. Passwords must
 be hashed server-side and never returned to Admin/Web/Flutter clients.
